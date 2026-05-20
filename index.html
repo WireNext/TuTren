@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0a0f1e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TuTren">
+<meta name="description" content="Rastreo de trenes en tiempo real en España">
+<link rel="manifest" href="#" id="manifest-link">
+<title>TuTren – Trenes en tiempo real</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500&display=swap');
+
+  :root {
+    --glass-bg: rgba(10, 15, 40, 0.55);
+    --glass-bg-light: rgba(255,255,255,0.08);
+    --glass-border: rgba(255,255,255,0.18);
+    --glass-border-strong: rgba(255,255,255,0.32);
+    --blur: blur(24px) saturate(180%);
+    --blur-heavy: blur(40px) saturate(200%);
+    --accent: #4f8cff;
+    --accent2: #a78bfa;
+    --accent3: #34d399;
+    --danger: #f87171;
+    --warning: #fbbf24;
+    --text: #e8eaf6;
+    --text-muted: rgba(232,234,246,0.6);
+    --text-dim: rgba(232,234,246,0.35);
+    --radius: 20px;
+    --radius-sm: 12px;
+    --cercanias-color: #2563eb;
+    --ld-color: #7c3aed;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    font-family: 'DM Sans', sans-serif;
+    background: #060c1a;
+    color: var(--text);
+  }
+
+  /* DESKTOP BLOCKER */
+  #desktop-block {
+    display: none;
+    position: fixed; inset: 0; z-index: 99999;
+    background: #060c1a;
+    align-items: center; justify-content: center;
+    flex-direction: column; text-align: center;
+    padding: 2rem;
+  }
+  @media (min-width: 1024px) {
+    #desktop-block { display: flex; }
+    #app { display: none; }
+  }
+  .desktop-logo { font-family: 'Space Grotesk', sans-serif; font-size: 3rem; font-weight: 700;
+    background: linear-gradient(135deg, #4f8cff, #a78bfa); -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent; margin-bottom: 1rem; }
+  .desktop-msg { font-size: 1.1rem; color: var(--text-muted); max-width: 380px; line-height: 1.6; }
+  .desktop-icon { font-size: 4rem; margin-bottom: 1.5rem; opacity: 0.6; }
+
+  /* MAIN APP */
+  #app { position: fixed; inset: 0; display: flex; flex-direction: column; }
+
+  /* MAP */
+  #map { flex: 1; width: 100%; z-index: 1; }
+
+  /* HEADER */
+  #header {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 100;
+    padding: env(safe-area-inset-top, 12px) 16px 0;
+    pointer-events: none;
+  }
+  .header-bar {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius);
+    padding: 10px 16px;
+    backdrop-filter: var(--blur);
+    -webkit-backdrop-filter: var(--blur);
+    pointer-events: all;
+    margin-top: 8px;
+  }
+  .logo {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.35rem; font-weight: 700;
+    background: linear-gradient(135deg, #4f8cff, #a78bfa);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    letter-spacing: -0.02em;
+    flex-shrink: 0;
+  }
+  .header-sep { flex: 1; }
+  .refresh-btn {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 1rem; color: var(--text);
+    transition: all 0.2s; flex-shrink: 0;
+  }
+  .refresh-btn:active { transform: scale(0.9); }
+  .refresh-btn.spinning { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* FILTER PILLS */
+  .filter-row {
+    position: absolute; z-index: 100;
+    left: 16px; right: 16px;
+    display: flex; gap: 8px; overflow-x: auto;
+    scrollbar-width: none; padding-bottom: 4px;
+    pointer-events: all;
+  }
+  .filter-row::-webkit-scrollbar { display: none; }
+  .pill {
+    flex-shrink: 0;
+    padding: 6px 14px;
+    border-radius: 100px;
+    font-size: 0.78rem; font-weight: 500;
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg);
+    backdrop-filter: var(--blur);
+    -webkit-backdrop-filter: var(--blur);
+    cursor: pointer; color: var(--text-muted);
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .pill.active { background: var(--accent); border-color: var(--accent); color: white; }
+  .pill.active.ld { background: var(--ld-color); border-color: var(--ld-color); }
+
+  /* STATUS BAR */
+  .status-bar {
+    position: absolute; z-index: 100;
+    left: 16px; right: 16px;
+    display: flex; align-items: center; gap: 8px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 100px; padding: 7px 14px;
+    backdrop-filter: var(--blur);
+    -webkit-backdrop-filter: var(--blur);
+    font-size: 0.75rem; color: var(--text-muted);
+  }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent3); flex-shrink: 0; animation: pulse 2s infinite; }
+  .status-dot.loading { background: var(--warning); animation: none; }
+  .status-dot.error { background: var(--danger); animation: none; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* ALERT BANNER */
+  .alert-banner {
+    position: absolute; z-index: 101;
+    left: 16px; right: 16px;
+    background: rgba(251, 191, 36, 0.15);
+    border: 1px solid rgba(251, 191, 36, 0.35);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    backdrop-filter: var(--blur);
+    -webkit-backdrop-filter: var(--blur);
+    font-size: 0.78rem; color: #fde68a;
+    display: none; cursor: pointer;
+  }
+  .alert-banner.visible { display: flex; align-items: flex-start; gap: 8px; }
+  .alert-icon { flex-shrink: 0; margin-top: 1px; }
+
+  /* TRAIN DETAIL PANEL */
+  #train-panel {
+    position: absolute; bottom: 0; left: 0; right: 0; z-index: 200;
+    transform: translateY(110%);
+    transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  #train-panel.open { transform: translateY(0); }
+  .panel-inner {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-bottom: none;
+    border-radius: var(--radius) var(--radius) 0 0;
+    backdrop-filter: var(--blur-heavy);
+    -webkit-backdrop-filter: var(--blur-heavy);
+    padding-bottom: env(safe-area-inset-bottom, 20px);
+    max-height: 70vh;
+    display: flex; flex-direction: column;
+  }
+  .panel-handle {
+    width: 36px; height: 4px; border-radius: 2px;
+    background: var(--glass-border-strong);
+    margin: 10px auto 0;
+    flex-shrink: 0;
+  }
+  .panel-header {
+    padding: 14px 20px 12px;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--glass-border);
+  }
+  .train-id-row { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .train-badge {
+    padding: 3px 10px; border-radius: 100px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 0.7rem; font-weight: 600; letter-spacing: 0.05em;
+  }
+  .badge-cercanias { background: rgba(37,99,235,0.25); color: #93c5fd; border: 1px solid rgba(37,99,235,0.4); }
+  .badge-ld { background: rgba(124,58,237,0.25); color: #c4b5fd; border: 1px solid rgba(124,58,237,0.4); }
+  .train-name { font-family: 'Space Grotesk', sans-serif; font-size: 1.1rem; font-weight: 600; color: var(--text); }
+  .delay-chip {
+    margin-left: auto; padding: 3px 10px; border-radius: 100px;
+    font-size: 0.72rem; font-weight: 600;
+  }
+  .delay-ok { background: rgba(52,211,153,0.2); color: #6ee7b7; border: 1px solid rgba(52,211,153,0.3); }
+  .delay-warn { background: rgba(251,191,36,0.2); color: #fde68a; border: 1px solid rgba(251,191,36,0.3); }
+  .delay-bad { background: rgba(248,113,113,0.2); color: #fca5a5; border: 1px solid rgba(248,113,113,0.3); }
+  .train-sub { font-size: 0.78rem; color: var(--text-muted); }
+
+  /* STOPS TIMELINE */
+  .stops-scroll {
+    overflow-y: auto; flex: 1;
+    padding: 4px 20px 16px;
+    overscroll-behavior: contain;
+  }
+  .stops-scroll::-webkit-scrollbar { width: 3px; }
+  .stops-scroll::-webkit-scrollbar-track { background: transparent; }
+  .stops-scroll::-webkit-scrollbar-thumb { background: var(--glass-border); border-radius: 2px; }
+
+  .section-label {
+    font-size: 0.65rem; font-weight: 600; letter-spacing: 0.1em;
+    color: var(--text-dim); text-transform: uppercase;
+    padding: 12px 0 6px;
+  }
+  .stop-item {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 5px 0; position: relative;
+  }
+  .stop-line-col { display: flex; flex-direction: column; align-items: center; width: 20px; flex-shrink: 0; padding-top: 2px; }
+  .stop-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .stop-dot.past { background: var(--text-dim); border: 2px solid transparent; }
+  .stop-dot.current { background: var(--accent); border: 2px solid rgba(79,140,255,0.4); box-shadow: 0 0 8px rgba(79,140,255,0.6); width: 12px; height: 12px; margin-left: -1px; }
+  .stop-dot.future { background: transparent; border: 2px solid var(--glass-border-strong); }
+  .stop-line { width: 2px; flex: 1; min-height: 16px; }
+  .stop-line.past { background: var(--text-dim); }
+  .stop-line.future { background: var(--glass-border); }
+  .stop-line.current { background: linear-gradient(to bottom, var(--accent), var(--glass-border)); }
+  .stop-info { flex: 1; padding-bottom: 6px; }
+  .stop-name { font-size: 0.85rem; font-weight: 500; color: var(--text); line-height: 1.3; }
+  .stop-name.past { color: var(--text-muted); font-weight: 400; }
+  .stop-name.current { color: white; }
+  .stop-times { display: flex; gap: 8px; align-items: center; margin-top: 2px; }
+  .stop-time { font-size: 0.72rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .stop-time.updated { color: var(--warning); }
+  .stop-time.early { color: var(--accent3); }
+  .stop-time-orig { font-size: 0.72rem; color: var(--text-dim); text-decoration: line-through; }
+
+  /* CLOSE BTN */
+  .panel-close {
+    position: absolute; top: 14px; right: 20px;
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 0.9rem; color: var(--text-muted);
+  }
+
+  /* PWA INSTALL PROMPT */
+  #pwa-prompt {
+    position: absolute; bottom: 20px; left: 16px; right: 16px; z-index: 300;
+    background: rgba(15,20,50,0.85);
+    border: 1px solid var(--glass-border-strong);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    backdrop-filter: var(--blur-heavy);
+    -webkit-backdrop-filter: var(--blur-heavy);
+    display: none;
+    animation: slideUp 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  #pwa-prompt.visible { display: block; }
+  @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .pwa-top { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .pwa-icon { width: 48px; height: 48px; border-radius: 12px;
+    background: linear-gradient(135deg, #1e3a8a, #4c1d95);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 1.1rem;
+    color: white; flex-shrink: 0; }
+  .pwa-title { font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 0.95rem; margin-bottom: 2px; }
+  .pwa-sub { font-size: 0.75rem; color: var(--text-muted); }
+  .pwa-actions { display: flex; gap: 8px; }
+  .pwa-btn-install {
+    flex: 1; padding: 10px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border: none; border-radius: var(--radius-sm);
+    color: white; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; font-weight: 500;
+    cursor: pointer; transition: opacity 0.2s;
+  }
+  .pwa-btn-install:active { opacity: 0.85; }
+  .pwa-btn-dismiss {
+    padding: 10px 16px;
+    background: var(--glass-bg-light);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted); font-size: 0.85rem;
+    cursor: pointer;
+  }
+
+  /* LEAFLET CUSTOM MARKER */
+  .train-marker-wrap { position: relative; }
+  .train-marker {
+    width: 32px; height: 32px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px solid rgba(255,255,255,0.4);
+    font-size: 0.65rem; font-weight: 700;
+    font-family: 'Space Grotesk', sans-serif;
+    cursor: pointer; color: white;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.5);
+    transition: transform 0.2s;
+  }
+  .train-marker.cercanias { background: radial-gradient(circle at 35% 35%, #3b82f6, #1d4ed8); }
+  .train-marker.ld { background: radial-gradient(circle at 35% 35%, #8b5cf6, #5b21b6); }
+  .train-marker:active { transform: scale(1.2); }
+
+  /* LOADING OVERLAY */
+  #loading {
+    position: fixed; inset: 0; z-index: 9999;
+    background: #060c1a;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 20px;
+    transition: opacity 0.5s;
+  }
+  #loading.fade { opacity: 0; pointer-events: none; }
+  .loading-logo {
+    font-family: 'Space Grotesk', sans-serif; font-size: 2.2rem; font-weight: 700;
+    background: linear-gradient(135deg, #4f8cff, #a78bfa);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .loading-bar { width: 160px; height: 3px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; }
+  .loading-bar-fill { height: 100%; background: linear-gradient(90deg, #4f8cff, #a78bfa); width: 0%; border-radius: 2px; transition: width 0.3s; }
+  .loading-text { font-size: 0.78rem; color: var(--text-muted); }
+
+  /* Leaflet popup override */
+  .leaflet-popup-content-wrapper {
+    background: rgba(10,15,40,0.9) !important;
+    border: 1px solid var(--glass-border) !important;
+    backdrop-filter: blur(20px) !important;
+    color: var(--text) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5) !important;
+  }
+  .leaflet-popup-tip { background: rgba(10,15,40,0.9) !important; }
+  .leaflet-popup-close-button { color: var(--text-muted) !important; }
+
+  .leaflet-control-attribution { display: none; }
+  .leaflet-control-zoom a { background: rgba(10,15,40,0.8) !important; border-color: var(--glass-border) !important; color: var(--text) !important; backdrop-filter: blur(10px); }
+</style>
+</head>
+<body>
+
+<!-- DESKTOP BLOCKER -->
+<div id="desktop-block">
+  <div class="desktop-icon">🚆</div>
+  <div class="desktop-logo">TuTren</div>
+  <div class="desktop-msg">TuTren está diseñado para móvil y tablet.<br>Abre esta página desde tu smartphone para rastrear trenes en tiempo real.</div>
+</div>
+
+<!-- LOADING -->
+<div id="loading">
+  <div class="loading-logo">TuTren</div>
+  <div class="loading-bar"><div class="loading-bar-fill" id="loading-fill"></div></div>
+  <div class="loading-text" id="loading-text">Cargando datos…</div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div id="map"></div>
+
+  <!-- HEADER -->
+  <div id="header">
+    <div class="header-bar">
+      <div class="logo">🚆 TuTren</div>
+      <div class="header-sep"></div>
+      <div class="refresh-btn" id="refresh-btn" title="Actualizar">↻</div>
+    </div>
+  </div>
+
+  <!-- FILTER PILLS (positioned dynamically via JS) -->
+  <div class="filter-row" id="filter-row">
+    <div class="pill active" data-filter="all">Todos</div>
+    <div class="pill active" data-filter="cercanias">Cercanías</div>
+    <div class="pill active ld" data-filter="ld">Larga Distancia</div>
+  </div>
+
+  <!-- STATUS BAR (positioned dynamically) -->
+  <div class="status-bar" id="status-bar">
+    <div class="status-dot loading" id="status-dot"></div>
+    <span id="status-text">Conectando…</span>
+  </div>
+
+  <!-- ALERT BANNER -->
+  <div class="alert-banner" id="alert-banner">
+    <span class="alert-icon">⚠️</span>
+    <span id="alert-text">Hay incidencias activas en la red</span>
+  </div>
+
+  <!-- TRAIN DETAIL PANEL -->
+  <div id="train-panel">
+    <div class="panel-inner">
+      <div class="panel-handle"></div>
+      <div class="panel-close" id="panel-close">✕</div>
+      <div class="panel-header">
+        <div class="train-id-row">
+          <div class="train-badge" id="panel-badge">Cercanías</div>
+          <div class="train-name" id="panel-name">C1 · Tren</div>
+          <div class="delay-chip delay-ok" id="panel-delay">A tiempo</div>
+        </div>
+        <div class="train-sub" id="panel-sub">Cargando información…</div>
+      </div>
+      <div class="stops-scroll" id="stops-list"></div>
+    </div>
+  </div>
+
+  <!-- PWA INSTALL -->
+  <div id="pwa-prompt">
+    <div class="pwa-top">
+      <div class="pwa-icon">🚆</div>
+      <div>
+        <div class="pwa-title">Instalar TuTren</div>
+        <div class="pwa-sub">Accede rápido desde tu pantalla de inicio</div>
+      </div>
+    </div>
+    <div class="pwa-actions">
+      <button class="pwa-btn-install" id="pwa-install-btn">Instalar app</button>
+      <button class="pwa-btn-dismiss" id="pwa-dismiss-btn">Ahora no</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── CONFIG ────────────────────────────────────────────
+const URLS = {
+  vehiclesCercanias: 'https://gtfsrt.renfe.com/vehicle_positions.json',
+  tripUpdatesCercanias: 'https://gtfsrt.renfe.com/trip_updates.json',
+  vehiclesLD: 'https://gtfsrt.renfe.com/vehicle_positions_LD.json',
+  tripUpdatesLD: 'https://gtfsrt.renfe.com/trip_updates_LD.json',
+  alerts: 'https://gtfsrt.renfe.com/alerts.json',
+  stopsCercanias: 'https://raw.githubusercontent.com/WireNext/cercaniasgtfs/refs/heads/main/data_csv/stops.csv',
+  stopTimescercanias: 'https://raw.githubusercontent.com/WireNext/cercaniasgtfs/refs/heads/main/data_csv/stop_times.csv',
+  tripsCercanias: 'https://raw.githubusercontent.com/WireNext/cercaniasgtfs/refs/heads/main/data_csv/trips.csv',
+  routesCercanias: 'https://raw.githubusercontent.com/WireNext/cercaniasgtfs/refs/heads/main/data_csv/routes.csv',
+  stopsLD: 'https://raw.githubusercontent.com/WireNext/laregorecorridogtfs/refs/heads/main/data_csv/stops.csv',
+  stopTimesLD: 'https://raw.githubusercontent.com/WireNext/laregorecorridogtfs/refs/heads/main/data_csv/stop_times.csv',
+  tripsLD: 'https://raw.githubusercontent.com/WireNext/laregorecorridogtfs/refs/heads/main/data_csv/trips.csv',
+  routesLD: 'https://raw.githubusercontent.com/WireNext/laregorecorridogtfs/refs/heads/main/data_csv/routes.csv',
+};
+
+// ─── STATE ─────────────────────────────────────────────
+const state = {
+  stops: {},           // stopId -> {name, lat, lon}
+  stopTimes: {},       // tripId -> [{stopId, arrivalTime, departureTime, stopSeq}]
+  trips: {},           // tripId -> {routeId, headsign}
+  routes: {},          // routeId -> {shortName, longName, color}
+  realtimeDelays: {},  // tripId -> {delay, stopId, updatedTime}
+  vehicles: [],        // [{id, tripId, lat, lon, label, type}]
+  markers: {},         // vehicleId -> leaflet marker
+  activeFilter: 'all',
+  selectedVehicle: null,
+  loading: true,
+};
+
+// ─── CSV PARSER ────────────────────────────────────────
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+  return lines.slice(1).map(line => {
+    const values = [];
+    let cur = '', inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') { inQ = !inQ; }
+      else if (c === ',' && !inQ) { values.push(cur.trim()); cur = ''; }
+      else cur += c;
+    }
+    values.push(cur.trim());
+    const obj = {};
+    headers.forEach((h, i) => { obj[h] = (values[i] || '').replace(/^"|"$/g, ''); });
+    return obj;
+  });
+}
+
+// ─── FETCH HELPERS ─────────────────────────────────────
+async function fetchJSON(url) {
+  const r = await fetch(url, { cache: 'no-cache' });
+  return r.json();
+}
+async function fetchCSV(url) {
+  const r = await fetch(url, { cache: 'force-cache' });
+  return parseCSV(await r.text());
+}
+
+// ─── TIME HELPERS ──────────────────────────────────────
+function gtfsTimeToday(gtfsTime) {
+  if (!gtfsTime) return null;
+  const [h, m, s] = gtfsTime.split(':').map(Number);
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h % 24, m, s || 0);
+  return d;
+}
+function formatTime(date) {
+  if (!date) return '--:--';
+  return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+}
+function formatDelay(seconds) {
+  if (!seconds || Math.abs(seconds) < 30) return null;
+  const mins = Math.round(seconds / 60);
+  if (mins > 0) return `+${mins} min`;
+  return `${mins} min`;
+}
+
+// ─── LOAD STATIC DATA ──────────────────────────────────
+let loadProgress = 0;
+function setProgress(p, msg) {
+  loadProgress = p;
+  document.getElementById('loading-fill').style.width = p + '%';
+  if (msg) document.getElementById('loading-text').textContent = msg;
+}
+
+async function loadStaticData() {
+  setProgress(5, 'Cargando paradas de Cercanías…');
+  const [stopsCercanias, stopsLD] = await Promise.all([
+    fetchCSV(URLS.stopsCercanias),
+    fetchCSV(URLS.stopsLD),
+  ]);
+  stopsCercanias.forEach(s => {
+    state.stops[s.stop_id] = { name: s.stop_name, lat: parseFloat(s.stop_lat), lon: parseFloat(s.stop_lon), type: 'cercanias' };
+  });
+  stopsLD.forEach(s => {
+    if (!state.stops[s.stop_id])
+      state.stops[s.stop_id] = { name: s.stop_name, lat: parseFloat(s.stop_lat), lon: parseFloat(s.stop_lon), type: 'ld' };
+  });
+
+  setProgress(25, 'Cargando rutas…');
+  const [routesCercanias, routesLD] = await Promise.all([
+    fetchCSV(URLS.routesCercanias),
+    fetchCSV(URLS.routesLD),
+  ]);
+  routesCercanias.forEach(r => {
+    state.routes[r.route_id] = { shortName: r.route_short_name, longName: r.route_long_name, color: r.route_color, type: 'cercanias' };
+  });
+  routesLD.forEach(r => {
+    state.routes[r.route_id] = { shortName: r.route_short_name, longName: r.route_long_name, color: r.route_color, type: 'ld' };
+  });
+
+  setProgress(45, 'Cargando viajes…');
+  const [tripsCercanias, tripsLD] = await Promise.all([
+    fetchCSV(URLS.tripsCercanias),
+    fetchCSV(URLS.tripsLD),
+  ]);
+  tripsCercanias.forEach(t => {
+    state.trips[t.trip_id] = { routeId: t.route_id, headsign: t.trip_headsign, type: 'cercanias' };
+  });
+  tripsLD.forEach(t => {
+    state.trips[t.trip_id] = { routeId: t.route_id, headsign: t.trip_headsign, type: 'ld' };
+  });
+
+  setProgress(60, 'Cargando horarios de paradas…');
+  try {
+    const [stCercanias, stLD] = await Promise.all([
+      fetchCSV(URLS.stopTimescercanias),
+      fetchCSV(URLS.stopTimesLD),
+    ]);
+    stCercanias.forEach(st => {
+      if (!state.stopTimes[st.trip_id]) state.stopTimes[st.trip_id] = [];
+      state.stopTimes[st.trip_id].push({ stopId: st.stop_id, arrival: st.arrival_time, departure: st.departure_time, seq: parseInt(st.stop_sequence) || 0 });
+    });
+    stLD.forEach(st => {
+      if (!state.stopTimes[st.trip_id]) state.stopTimes[st.trip_id] = [];
+      state.stopTimes[st.trip_id].push({ stopId: st.stop_id, arrival: st.arrival_time, departure: st.departure_time, seq: parseInt(st.stop_sequence) || 0 });
+    });
+    Object.keys(state.stopTimes).forEach(tid => {
+      state.stopTimes[tid].sort((a, b) => a.seq - b.seq);
+    });
+  } catch(e) {
+    console.warn('stop_times load error:', e);
+  }
+
+  setProgress(85, 'Conectando tiempo real…');
+}
+
+// ─── LOAD REALTIME ─────────────────────────────────────
+async function loadRealtime() {
+  try {
+    const [vcJson, tuJson, vldJson, tuldJson, alertJson] = await Promise.all([
+      fetchJSON(URLS.vehiclesCercanias),
+      fetchJSON(URLS.tripUpdatesCercanias),
+      fetchJSON(URLS.vehiclesLD),
+      fetchJSON(URLS.tripUpdatesLD),
+      fetchJSON(URLS.alerts).catch(() => ({ entity: [] })),
+    ]);
+
+    // Process delays
+    state.realtimeDelays = {};
+    [...(tuJson.entity || []), ...(tuldJson.entity || [])].forEach(e => {
+      if (e.tripUpdate) {
+        const tu = e.tripUpdate;
+        const tid = tu.trip?.tripId;
+        if (tid) {
+          const upd = tu.stopTimeUpdate?.[0];
+          state.realtimeDelays[tid] = {
+            delay: tu.delay || upd?.arrival?.delay || 0,
+            stopId: upd?.stopId,
+            updatedTime: upd?.arrival?.time,
+          };
+        }
+      }
+    });
+
+    // Process vehicles
+    const newVehicles = [];
+    (vcJson.entity || []).forEach(e => {
+      if (e.vehicle?.position) {
+        const v = e.vehicle;
+        newVehicles.push({
+          id: e.id, tripId: v.trip?.tripId,
+          lat: v.position.latitude, lon: v.position.longitude,
+          label: v.vehicle?.label || e.id, stopId: v.stopId,
+          status: v.currentStatus, type: 'cercanias',
+        });
+      }
+    });
+    (vldJson.entity || []).forEach(e => {
+      if (e.vehicle?.position) {
+        const v = e.vehicle;
+        newVehicles.push({
+          id: e.id, tripId: v.trip?.tripId,
+          lat: v.position.latitude, lon: v.position.longitude,
+          label: v.vehicle?.label || e.id, stopId: v.stopId,
+          status: v.currentStatus, type: 'ld',
+        });
+      }
+    });
+    state.vehicles = newVehicles;
+
+    // Alerts
+    const alerts = alertJson.entity || [];
+    const activeAlerts = alerts.filter(a => a.alert?.headerText);
+    if (activeAlerts.length > 0) {
+      const banner = document.getElementById('alert-banner');
+      const a = activeAlerts[0].alert;
+      const txt = a.headerText?.translation?.[0]?.text || 'Incidencias activas en la red';
+      document.getElementById('alert-text').textContent = `${activeAlerts.length} incidencia${activeAlerts.length > 1 ? 's' : ''}: ${txt.slice(0, 80)}${txt.length > 80 ? '…' : ''}`;
+      banner.classList.add('visible');
+      setTimeout(() => banner.classList.remove('visible'), 8000);
+    }
+
+    updateStatus('ok', `${newVehicles.length} trenes en circulación · ${new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`);
+    renderMarkers();
+  } catch(err) {
+    console.error('Realtime error:', err);
+    updateStatus('error', 'Error al conectar — reintentando…');
+  }
+}
+
+// ─── STATUS ────────────────────────────────────────────
+function updateStatus(type, msg) {
+  const dot = document.getElementById('status-dot');
+  const txt = document.getElementById('status-text');
+  dot.className = 'status-dot ' + (type === 'ok' ? '' : type);
+  txt.textContent = msg;
+}
+
+// ─── MAP INIT ──────────────────────────────────────────
+let map;
+function initMap() {
+  map = L.map('map', {
+    center: [40.416775, -3.703790],
+    zoom: 6,
+    zoomControl: true,
+    attributionControl: false,
+  });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19,
+    subdomains: 'abcd',
+  }).addTo(map);
+
+  map.on('click', () => closePanel());
+}
+
+// ─── MARKERS ───────────────────────────────────────────
+function getRouteLabel(tripId, type) {
+  const trip = state.trips[tripId];
+  if (!trip) return type === 'ld' ? 'LD' : 'C?';
+  const route = state.routes[trip.routeId];
+  if (!route) return type === 'ld' ? 'LD' : 'C?';
+  const sn = route.shortName || '';
+  return sn.slice(0, 3) || (type === 'ld' ? 'LD' : 'C?');
+}
+
+function renderMarkers() {
+  const shown = new Set();
+  state.vehicles.forEach(v => {
+    if (state.activeFilter !== 'all' && v.type !== state.activeFilter) return;
+    if (!v.lat || !v.lon || isNaN(v.lat) || isNaN(v.lon)) return;
+
+    shown.add(v.id);
+    const label = getRouteLabel(v.tripId, v.type);
+
+    if (state.markers[v.id]) {
+      state.markers[v.id].setLatLng([v.lat, v.lon]);
+      // Update icon label
+      const el = state.markers[v.id].getElement();
+      if (el) el.querySelector('.train-marker').textContent = label;
+    } else {
+      const icon = L.divIcon({
+        html: `<div class="train-marker ${v.type}">${label}</div>`,
+        className: 'train-marker-wrap',
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
+      });
+      const marker = L.marker([v.lat, v.lon], { icon, zIndexOffset: 100 }).addTo(map);
+      marker.on('click', (e) => { e.originalEvent.stopPropagation(); openTrainPanel(v.id); });
+      state.markers[v.id] = marker;
+    }
+  });
+
+  // Remove stale markers
+  Object.keys(state.markers).forEach(id => {
+    if (!shown.has(id)) {
+      map.removeLayer(state.markers[id]);
+      delete state.markers[id];
+    }
+  });
+}
+
+// ─── TRAIN PANEL ───────────────────────────────────────
+function openTrainPanel(vehicleId) {
+  const v = state.vehicles.find(x => x.id === vehicleId);
+  if (!v) return;
+  state.selectedVehicle = vehicleId;
+
+  const trip = state.trips[v.tripId] || {};
+  const route = state.routes[trip.routeId] || {};
+  const delay = state.realtimeDelays[v.tripId];
+  const delaySecs = delay?.delay || 0;
+
+  // Badge
+  const badge = document.getElementById('panel-badge');
+  badge.textContent = v.type === 'ld' ? 'Larga Distancia' : 'Cercanías';
+  badge.className = 'train-badge ' + (v.type === 'ld' ? 'badge-ld' : 'badge-cercanias');
+
+  // Name
+  const sn = route.shortName || '';
+  const headsign = trip.headsign || '';
+  document.getElementById('panel-name').textContent = [sn, headsign].filter(Boolean).join(' · ') || v.label || v.id;
+
+  // Sub
+  const curStop = state.stops[v.stopId];
+  document.getElementById('panel-sub').textContent = curStop ? `En: ${curStop.name}` : `ID: ${v.tripId || v.id}`;
+
+  // Delay chip
+  const delayChip = document.getElementById('panel-delay');
+  const delayStr = formatDelay(delaySecs);
+  if (!delayStr) {
+    delayChip.textContent = 'A tiempo'; delayChip.className = 'delay-chip delay-ok';
+  } else if (delaySecs < 0) {
+    delayChip.textContent = delayStr + ' adelanto'; delayChip.className = 'delay-chip delay-ok';
+  } else if (delaySecs < 300) {
+    delayChip.textContent = delayStr; delayChip.className = 'delay-chip delay-warn';
+  } else {
+    delayChip.textContent = delayStr; delayChip.className = 'delay-chip delay-bad';
+  }
+
+  // Build stops timeline
+  buildStopsTimeline(v, delaySecs);
+
+  document.getElementById('train-panel').classList.add('open');
+
+  // Fly to train
+  map.flyTo([v.lat, v.lon], Math.max(map.getZoom(), 12), { duration: 0.8 });
+}
+
+function buildStopsTimeline(v, delaySecs) {
+  const list = document.getElementById('stops-list');
+  list.innerHTML = '';
+
+  const schedule = state.stopTimes[v.tripId];
+  if (!schedule || schedule.length === 0) {
+    list.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem;padding:16px 0;text-align:center">Horario no disponible para este tren</div>';
+    return;
+  }
+
+  const now = new Date();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+  // Find current stop index
+  let currentIdx = 0;
+  for (let i = 0; i < schedule.length; i++) {
+    const st = schedule[i];
+    if (v.stopId && st.stopId === v.stopId) { currentIdx = i; break; }
+    const arr = gtfsTimeToday(st.arrival);
+    if (arr && arr < now) currentIdx = i;
+  }
+
+  // Past stops
+  const pastStops = schedule.slice(Math.max(0, currentIdx - 4), currentIdx);
+  const futureStops = schedule.slice(currentIdx);
+
+  if (pastStops.length > 0) {
+    list.innerHTML += `<div class="section-label">Paradas anteriores</div>`;
+    pastStops.forEach((st, i) => {
+      const stop = state.stops[st.stopId] || { name: st.stopId };
+      const arr = gtfsTimeToday(st.arrival);
+      const isLast = i === pastStops.length - 1;
+      list.innerHTML += stopItemHTML(stop.name, st, 'past', arr, 0, isLast ? 'current' : 'past');
+    });
+  }
+
+  if (futureStops.length > 0) {
+    list.innerHTML += `<div class="section-label">Próximas paradas</div>`;
+    futureStops.forEach((st, i) => {
+      const stop = state.stops[st.stopId] || { name: st.stopId };
+      const arr = gtfsTimeToday(st.arrival);
+      const isCurrent = i === 0;
+      list.innerHTML += stopItemHTML(stop.name, st, isCurrent ? 'current' : 'future', arr, delaySecs, 'future');
+    });
+  }
+
+  // Scroll to current
+  setTimeout(() => {
+    const cur = list.querySelector('.stop-dot.current');
+    if (cur) cur.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 100);
+}
+
+function stopItemHTML(name, st, phase, arrDate, delaySecs, linePhase) {
+  const isCurrent = phase === 'current';
+  const isPast = phase === 'past';
+  const origTime = arrDate ? formatTime(arrDate) : '--:--';
+  let updatedTime = '';
+  let timeClass = 'stop-time';
+
+  if (!isPast && arrDate && delaySecs) {
+    const updated = new Date(arrDate.getTime() + delaySecs * 1000);
+    if (Math.abs(delaySecs) >= 30) {
+      updatedTime = formatTime(updated);
+      timeClass = delaySecs > 0 ? 'stop-time updated' : 'stop-time early';
+    }
+  }
+
+  const dotClass = `stop-dot ${phase}`;
+  const nameClass = `stop-name ${isPast ? 'past' : isCurrent ? 'current' : ''}`;
+
+  return `<div class="stop-item">
+    <div class="stop-line-col">
+      <div class="${dotClass}"></div>
+      <div class="stop-line ${linePhase}"></div>
+    </div>
+    <div class="stop-info">
+      <div class="${nameClass}">${name}</div>
+      <div class="stop-times">
+        ${updatedTime ? `<span class="stop-time-orig">${origTime}</span><span class="${timeClass}">${updatedTime}</span>` : `<span class="${timeClass}">${origTime}</span>`}
+      </div>
+    </div>
+  </div>`;
+}
+
+function closePanel() {
+  document.getElementById('train-panel').classList.remove('open');
+  state.selectedVehicle = null;
+}
+
+// ─── FILTER PILLS ──────────────────────────────────────
+function initFilters() {
+  document.querySelectorAll('.pill[data-filter]').forEach(pill => {
+    pill.addEventListener('click', () => {
+      const f = pill.dataset.filter;
+      if (f === 'all') {
+        state.activeFilter = 'all';
+        document.querySelectorAll('.pill').forEach(p => p.classList.add('active'));
+      } else {
+        state.activeFilter = f;
+        document.querySelectorAll('.pill').forEach(p => {
+          p.classList.toggle('active', p.dataset.filter === f || p.dataset.filter === 'all');
+        });
+        // Keep "all" pill style neutral when specific filter active
+        document.querySelector('.pill[data-filter="all"]').classList.remove('active');
+      }
+      renderMarkers();
+    });
+  });
+}
+
+// ─── POSITION UI ELEMENTS ──────────────────────────────
+function positionUI() {
+  const headerBar = document.querySelector('.header-bar');
+  const headerHeight = document.getElementById('header').offsetHeight + headerBar.offsetHeight + 8;
+  const filterRow = document.getElementById('filter-row');
+  const statusBar = document.getElementById('status-bar');
+  const alertBanner = document.getElementById('alert-banner');
+
+  filterRow.style.top = (headerHeight + 8) + 'px';
+  statusBar.style.top = (headerHeight + 52) + 'px';
+  alertBanner.style.top = (headerHeight + 96) + 'px';
+}
+
+// ─── PWA ───────────────────────────────────────────────
+let deferredPrompt = null;
+
+function initPWA() {
+  // Check if already installed
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  if (isStandalone) return;
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    // Show after 5s
+    setTimeout(() => {
+      document.getElementById('pwa-prompt').classList.add('visible');
+    }, 5000);
+  });
+
+  document.getElementById('pwa-install-btn').addEventListener('click', async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      deferredPrompt = null;
+    }
+    document.getElementById('pwa-prompt').classList.remove('visible');
+  });
+
+  document.getElementById('pwa-dismiss-btn').addEventListener('click', () => {
+    document.getElementById('pwa-prompt').classList.remove('visible');
+  });
+
+  window.addEventListener('appinstalled', () => {
+    document.getElementById('pwa-prompt').classList.remove('visible');
+    deferredPrompt = null;
+  });
+}
+
+// Inline manifest
+function injectManifest() {
+  const manifest = {
+    name: 'TuTren – Trenes en tiempo real',
+    short_name: 'TuTren',
+    description: 'Rastreo de trenes de Renfe en tiempo real',
+    start_url: '.',
+    display: 'standalone',
+    background_color: '#060c1a',
+    theme_color: '#0a0f1e',
+    orientation: 'portrait',
+    icons: [
+      { src: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" fill="%23060c1a" rx="40"/><text y="140" x="96" text-anchor="middle" font-size="120">🚆</text></svg>', sizes: '192x192', type: 'image/svg+xml' },
+    ]
+  };
+  const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  document.getElementById('manifest-link').href = url;
+}
+
+// ─── PANEL CLOSE ───────────────────────────────────────
+document.getElementById('panel-close').addEventListener('click', closePanel);
+document.getElementById('alert-banner').addEventListener('click', () => {
+  document.getElementById('alert-banner').classList.remove('visible');
+});
+
+// ─── REFRESH ───────────────────────────────────────────
+document.getElementById('refresh-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('refresh-btn');
+  btn.classList.add('spinning');
+  updateStatus('loading', 'Actualizando…');
+  await loadRealtime();
+  btn.classList.remove('spinning');
+});
+
+// ─── MAIN ──────────────────────────────────────────────
+async function main() {
+  injectManifest();
+  initPWA();
+  initMap();
+  positionUI();
+  window.addEventListener('resize', positionUI);
+  initFilters();
+
+  // Panel drag to close
+  let startY = 0;
+  const panel = document.getElementById('train-panel');
+  panel.addEventListener('touchstart', e => { startY = e.touches[0].clientY; }, { passive: true });
+  panel.addEventListener('touchend', e => {
+    const dy = e.changedTouches[0].clientY - startY;
+    if (dy > 60) closePanel();
+  }, { passive: true });
+
+  try {
+    await loadStaticData();
+    setProgress(95, 'Casi listo…');
+    await loadRealtime();
+    setProgress(100, 'Listo');
+    setTimeout(() => {
+      const loading = document.getElementById('loading');
+      loading.classList.add('fade');
+      setTimeout(() => loading.remove(), 500);
+    }, 300);
+  } catch(err) {
+    console.error(err);
+    document.getElementById('loading-text').textContent = 'Error al cargar datos. Reintentando…';
+    setTimeout(main, 3000);
+    return;
+  }
+
+  // Auto-refresh every 30s
+  setInterval(loadRealtime, 30000);
+}
+
+main();
+</script>
+</body>
+</html>
