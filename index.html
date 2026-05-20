@@ -311,10 +311,10 @@
     border: none;
   }
 .train-marker {
-    width: 32px; 
-    height: 32px; 
+    width: 32px !important; 
+    height: 32px !important; 
     border-radius: 50%;
-    display: flex; 
+    display: flex !important; 
     align-items: center; 
     justify-content: center;
     border: 2px solid rgba(255,255,255,0.4);
@@ -325,14 +325,11 @@
     color: white;
     box-shadow: 0 2px 12px rgba(0,0,0,0.5);
     transition: transform 0.2s;
-    /* Aseguramos que se alinee perfectamente con la envoltura de Leaflet */
-    position: absolute;
-    top: 0;
-    left: 0;
+    margin: 0 !important; /* Crucial: Evita que Leaflet desfase el punto por el margen por defecto */
   }
-.train-marker.cercanias { background: radial-gradient(circle at 35% 35%, #3b82f6, #1d4ed8); }
-.train-marker.ld { background: radial-gradient(circle at 35% 35%, #8b5cf6, #5b21b6); }
-.train-marker:active { transform: scale(1.2); }
+  .train-marker.cercanias { background: radial-gradient(circle at 35% 35%, #3b82f6, #1d4ed8); }
+  .train-marker.ld { background: radial-gradient(circle at 35% 35%, #8b5cf6, #5b21b6); }
+  .train-marker:active { transform: scale(1.2); }
 
   /* LOADING OVERLAY */
   #loading {
@@ -724,27 +721,25 @@ function renderMarkers() {
 
     if (state.markers[v.id]) {
       state.markers[v.id].setLatLng([v.lat, v.lon]);
-      // Update icon label
+      // Actualizar el texto del marcador existente
       const el = state.markers[v.id].getElement();
-      if (el) {
-        const markerDiv = el.querySelector('.train-marker');
-        if (markerDiv) markerDiv.textContent = label;
-      }
+      if (el) el.textContent = label;
     } else {
-      // CORRECCIÓN: Definimos las dimensiones de la envoltura para que coincidan con el div interno
+      // SOLUCIÓN: El L.divIcon ahora es directamente el propio círculo del tren
       const icon = L.divIcon({
-        html: `<div class="train-marker ${v.type}">${label}</div>`,
-        className: 'train-marker-wrap',
-        iconSize: [32, 32],      // Tamaño del contenedor [ancho, alto]
-        iconAnchor: [16, 16],    // PUNTO CLAVE: Anclaje al centro exacto (mitad de 32)
+        className: `train-marker ${v.type}`, // Las clases CSS se aplican directamente aquí
+        html: label,                         // El texto va directo dentro
+        iconSize: [32, 32],                  // Dimensiones físicas del marcador
+        iconAnchor: [16, 16],                // Clava el centro exacto (mitad de 32)
       });
+      
       const marker = L.marker([v.lat, v.lon], { icon, zIndexOffset: 100 }).addTo(map);
       marker.on('click', (e) => { e.originalEvent.stopPropagation(); openTrainPanel(v.id); });
       state.markers[v.id] = marker;
     }
   });
 
-  // Remove stale markers
+  // Eliminar marcadores antiguos
   Object.keys(state.markers).forEach(id => {
     if (!shown.has(id)) {
       map.removeLayer(state.markers[id]);
