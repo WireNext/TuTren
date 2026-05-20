@@ -305,20 +305,34 @@
   }
 
   /* LEAFLET CUSTOM MARKER */
-  .train-marker-wrap { position: relative; }
-  .train-marker {
-    width: 32px; height: 32px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
+  .train-marker-wrap { 
+    position: relative; 
+    background: transparent; 
+    border: none;
+  }
+.train-marker {
+    width: 32px; 
+    height: 32px; 
+    border-radius: 50%;
+    display: flex; 
+    align-items: center; 
+    justify-content: center;
     border: 2px solid rgba(255,255,255,0.4);
-    font-size: 0.65rem; font-weight: 700;
+    font-size: 0.65rem; 
+    font-weight: 700;
     font-family: 'Space Grotesk', sans-serif;
-    cursor: pointer; color: white;
+    cursor: pointer; 
+    color: white;
     box-shadow: 0 2px 12px rgba(0,0,0,0.5);
     transition: transform 0.2s;
+    /* Aseguramos que se alinee perfectamente con la envoltura de Leaflet */
+    position: absolute;
+    top: 0;
+    left: 0;
   }
-  .train-marker.cercanias { background: radial-gradient(circle at 35% 35%, #3b82f6, #1d4ed8); }
-  .train-marker.ld { background: radial-gradient(circle at 35% 35%, #8b5cf6, #5b21b6); }
-  .train-marker:active { transform: scale(1.2); }
+.train-marker.cercanias { background: radial-gradient(circle at 35% 35%, #3b82f6, #1d4ed8); }
+.train-marker.ld { background: radial-gradient(circle at 35% 35%, #8b5cf6, #5b21b6); }
+.train-marker:active { transform: scale(1.2); }
 
   /* LOADING OVERLAY */
   #loading {
@@ -712,13 +726,17 @@ function renderMarkers() {
       state.markers[v.id].setLatLng([v.lat, v.lon]);
       // Update icon label
       const el = state.markers[v.id].getElement();
-      if (el) el.querySelector('.train-marker').textContent = label;
+      if (el) {
+        const markerDiv = el.querySelector('.train-marker');
+        if (markerDiv) markerDiv.textContent = label;
+      }
     } else {
+      // CORRECCIÓN: Definimos las dimensiones de la envoltura para que coincidan con el div interno
       const icon = L.divIcon({
         html: `<div class="train-marker ${v.type}">${label}</div>`,
         className: 'train-marker-wrap',
-        iconSize: [32, 32],
-        iconAnchor: [16, 16],
+        iconSize: [32, 32],      // Tamaño del contenedor [ancho, alto]
+        iconAnchor: [16, 16],    // PUNTO CLAVE: Anclaje al centro exacto (mitad de 32)
       });
       const marker = L.marker([v.lat, v.lon], { icon, zIndexOffset: 100 }).addTo(map);
       marker.on('click', (e) => { e.originalEvent.stopPropagation(); openTrainPanel(v.id); });
