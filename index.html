@@ -437,13 +437,16 @@
 
 <script>
 // ─── CONFIG ────────────────────────────────────────────
+
+const PROXY = '/api/proxy?url=';
+
 const URLS = {
-  vehiclesCercanias: 'https://gtfsrt.renfe.com/vehicle_positions.json',
-  tripUpdatesCercanias: 'https://gtfsrt.renfe.com/trip_updates.json',
-  vehiclesLD: 'https://gtfsrt.renfe.com/vehicle_positions_LD.json',
-  tripUpdatesLD: 'https://gtfsrt.renfe.com/trip_updates_LD.json',
-  alerts: 'https://gtfsrt.renfe.com/alerts.json',
-  stopsCercanias: 'https://raw.githubusercontent.com/WireNext/cercaniasgtfs/refs/heads/main/data_csv/stops.csv',
+  vehiclesCercanias: PROXY + 'https://gtfsrt.renfe.com/vehicle_positions.json',
+  tripUpdatesCercanias: PROXY + 'https://gtfsrt.renfe.com/trip_updates.json',
+  vehiclesLD: PROXY + 'https://gtfsrt.renfe.com/vehicle_positions_LD.json',
+  tripUpdatesLD: PROXY + 'https://gtfsrt.renfe.com/trip_updates_LD.json',
+  alerts: PROXY + 'https://gtfsrt.renfe.com/alerts.json',
+  stopsCercanias:  'https://raw.githubusercontent.com/WireNext/cercaniasgtfs/refs/heads/main/data_csv/stops.csv',
   stopTimescercanias: 'https://raw.githubusercontent.com/WireNext/cercaniasgtfs/refs/heads/main/data_csv/stop_times.csv',
   tripsCercanias: 'https://raw.githubusercontent.com/WireNext/cercaniasgtfs/refs/heads/main/data_csv/trips.csv',
   routesCercanias: 'https://raw.githubusercontent.com/WireNext/cercaniasgtfs/refs/heads/main/data_csv/routes.csv',
