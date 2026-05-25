@@ -964,7 +964,8 @@ function openStationPanel(renfeStation) {
       const { trip, route, arr, arrUpdated, delaySecs, tripId } = item;
       const type = (trip.type || (route.type === 'cercanias' ? 'cercanias' : 'ld'));
       const routeLabel = (route.shortName || '').slice(0, 4) || (type === 'ld' ? 'LD' : 'C');
-      const dest = trip.headsign || route.longName || tripId;
+      const destRaw = trip.headsign || route.longName || tripId;
+      const dest = fixUtf8String(destRaw);
       const origTime = formatTime(arr);
       const updTime = Math.abs(delaySecs) >= 30 ? formatTime(arrUpdated) : null;
       const delayStr = formatDelay(delaySecs);
@@ -1079,19 +1080,20 @@ function buildStopsTimeline(v, delaySecs) {
     list.innerHTML += `<div class="section-label">Paradas anteriores</div>`;
     pastStops.forEach((st, i) => {
       const stop = state.stops[st.stopId] || { name: st.stopId };
+      const stopNameClean = fixUtf8String(stop.name || st.stopId); // <-- Limpiamos el texto
       const arr = gtfsTimeToday(st.arrival);
       const isLast = i === pastStops.length - 1;
-      list.innerHTML += stopItemHTML(stop.name, st, 'past', arr, 0, isLast ? 'current' : 'past');
+      list.innerHTML += stopItemHTML(stopNameClean, st, 'past', arr, 0, isLast ? 'current' : 'past');
     });
   }
-
   if (futureStops.length > 0) {
     list.innerHTML += `<div class="section-label">Próximas paradas</div>`;
     futureStops.forEach((st, i) => {
       const stop = state.stops[st.stopId] || { name: st.stopId };
+      const stopNameClean = fixUtf8String(stop.name || st.stopId); // <-- Limpiamos el texto
       const arr = gtfsTimeToday(st.arrival);
       const isCurrent = i === 0;
-      list.innerHTML += stopItemHTML(stop.name, st, isCurrent ? 'current' : 'future', arr, delaySecs, 'future');
+      list.innerHTML += stopItemHTML(stopNameClean, st, isCurrent ? 'current' : 'future', arr, delaySecs, 'future');
     });
   }
 
@@ -1158,6 +1160,18 @@ function initFilters() {
       renderMarkers();
     });
   });
+}
+
+// Decodifica strings UTF-8 mal interpretados por ISO-8859-1 o codificaciones incorrectas
+function fixUtf8String(str) {
+  if (!str) return '';
+  try {
+    // Intenta recomponer los bytes mal interpretados como UTF-8 nativo
+    return decodeURIComponent(escape(str));
+  } catch (e) {
+    // Si falla o el string ya venía bien codificado y rompe, devuelve el original
+    return str;
+  }
 }
 
 // ─── POSITION UI ELEMENTS ──────────────────────────────
