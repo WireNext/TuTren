@@ -363,6 +363,63 @@
 
   .leaflet-control-attribution { display: none; }
   .leaflet-control-zoom a { background: rgba(10,15,40,0.8) !important; border-color: var(--glass-border) !important; color: var(--text) !important; backdrop-filter: blur(10px); }
+
+  /* STATION MARKERS */
+  .station-marker {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: #fbbf24;
+    border: 2px solid rgba(255,255,255,0.6);
+    box-shadow: 0 1px 6px rgba(0,0,0,0.5);
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
+  .station-marker:active { transform: scale(1.4); }
+  .station-marker.cercanias { background: #2563eb; }
+  .station-marker.feve { background: #059669; }
+
+  /* STATION PANEL */
+  #station-panel {
+    position: absolute; bottom: 0; left: 0; right: 0; z-index: 200;
+    transform: translateY(110%);
+    transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  #station-panel.open { transform: translateY(0); }
+  .station-panel-inner {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-bottom: none;
+    border-radius: var(--radius) var(--radius) 0 0;
+    backdrop-filter: var(--blur-heavy);
+    -webkit-backdrop-filter: var(--blur-heavy);
+    padding-bottom: env(safe-area-inset-bottom, 20px);
+    max-height: 75vh;
+    display: flex; flex-direction: column;
+  }
+  .station-train-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--glass-border);
+  }
+  .station-train-item:last-child { border-bottom: none; }
+  .station-route-badge {
+    min-width: 44px; padding: 4px 8px; border-radius: 100px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em;
+    text-align: center; flex-shrink: 0;
+  }
+  .station-route-badge.cercanias { background: rgba(37,99,235,0.25); color: #93c5fd; border: 1px solid rgba(37,99,235,0.4); }
+  .station-route-badge.ld { background: rgba(124,58,237,0.25); color: #c4b5fd; border: 1px solid rgba(124,58,237,0.4); }
+  .station-train-info { flex: 1; min-width: 0; }
+  .station-train-dest { font-size: 0.83rem; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .station-train-times { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+  .station-train-time { font-size: 0.78rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .station-train-time.delayed { color: var(--warning); }
+  .station-train-time.early { color: var(--accent3); }
+  .station-train-time-orig { font-size: 0.72rem; color: var(--text-dim); text-decoration: line-through; font-variant-numeric: tabular-nums; }
+  .station-delay-badge {
+    padding: 2px 8px; border-radius: 100px; font-size: 0.68rem; font-weight: 600; flex-shrink: 0;
+  }
+  .station-empty { padding: 24px 20px; text-align: center; font-size: 0.82rem; color: var(--text-muted); }
 </style>
 </head>
 <body>
@@ -413,6 +470,22 @@
     <span id="alert-text">Hay incidencias activas en la red</span>
   </div>
 
+  <!-- STATION DETAIL PANEL -->
+  <div id="station-panel">
+    <div class="station-panel-inner">
+      <div class="panel-handle"></div>
+      <div class="panel-close" id="station-panel-close">✕</div>
+      <div class="panel-header">
+        <div class="train-id-row">
+          <div class="train-badge badge-cercanias" id="station-panel-badge">Estación</div>
+          <div class="train-name" id="station-panel-name">Nombre Estación</div>
+        </div>
+        <div class="train-sub" id="station-panel-sub">Próximos trenes</div>
+      </div>
+      <div class="stops-scroll" id="station-trains-list"></div>
+    </div>
+  </div>
+
   <!-- TRAIN DETAIL PANEL -->
   <div id="train-panel">
     <div class="panel-inner">
@@ -451,6 +524,44 @@
 
 const PROXY = '/api/proxy?url=';
 
+// ─── RENFE STATIONS CSV (estaciones de Renfe) ──────────
+const RENFE_STATIONS_CSV = `"CODIGO";"DESCRIPCION";"LATITUD";"LONGITUD";"DIRECION";"CP";"POBLACION";"PROVINCIA";"PAIS";"CERCANIAS";"FEVE";"COMUN"
+"01003";"ARAHAL";"37.2680810";"-5.5485140";"C/ Virgen de los Dolores, S/N";"41600";"ARAHAL";"SEVILLA";"ESPAÑA";"NO";"NO";""
+"01005";"MARCHENA";"37.3342820";"-5.4255190";"Avda. Maestro Santos Rüano, 8";"41620";"MARCHENA";"SEVILLA";"ESPAÑA";"NO";"NO";""
+"01007";"OSUNA";"37.2338990";"-5.1150260";"Avda. Estación Ferrocarril, S/N";"41640";"OSUNA";"SEVILLA";"ESPAÑA";"NO";"NO";""
+"01009";"PEDRERA";"37.2223960";"-4.8935190";"C/ Manuel Aranda, 3";"41566";"PEDRERA";"SEVILLA";"ESPAÑA";"NO";"NO";""
+"02002";"PUENTE GENIL-HERRERA";"37.3579000";"-4.8216380";"Ctra. A-318 - Km. 9";"14500";"PUENTE GENIL";"CÓRDOBA";"ESPAÑA";"NO";"NO";"PTE G"
+"02003";"ANTEQUERA-SANTA ANA";"37.0698810";"-4.7190140";"Ctra. Ma - 5406 - Estación Ferrocarril, S/N";"29540";"ANTEQUERA";"MÁLAGA";"ESPAÑA";"NO";"NO";"ANTEQ"
+"02030";"ANTEQUERA AV";"37.0334437";"-4.5612901";"Ctra A-7281 Antigua Carretera de Córdoba S/N";"29200";"ANTEQUERA";"MÁLAGA";"ESPAÑA";"NO";"NO";"ANTEQ"
+"03001";"MENGÍBAR-ARTICHUELA";"37.9782190";"-3.8033080";"C/ Camino Estación Ferrocarril, S/N";"23620";"MENGÍBAR";"JAÉN";"ESPAÑA";"NO";"NO";""
+"03100";"JAÉN";"37.7798270";"-3.7907980";"Pla. de Jaen Por la Paz, 1";"23007";"JAÉN";"JAÉN";"ESPAÑA";"NO";"NO";""
+"03208";"CUENCA-FERNANDO ZÓBEL";"40.0351920";"-2.1444100";"Avda. Cerro de la Estrella, S/N";"16004";"CUENCA";"CUENCA";"ESPAÑA";"NO";"NO";"CUENC"
+"03213";"REQUENA-UTIEL";"39.5198340";"-1.1276010";"Autovia A3 - Salida 285";"46340";"REQUENA";"VALENCIA/VALÈNCIA";"ESPAÑA";"NO";"NO";""
+"03216";"VALÈNCIA-JOAQUÍN SOROLLA";"39.4590510";"-0.3829230";"C/ San Vicente Martir, 171";"46007";"VALENCIA";"VALENCIA/VALÈNCIA";"ESPAÑA";"SI";"NO";"VALEN"
+"03309";"VILLENA ALTA VELOCIDAD";"38.5853020";"-0.8732950";"Partida de San Juan, 182";"03400";"VILLENA";"ALICANTE/ALACANT";"ESPAÑA";"SI";"NO";""
+"03410";"ELCHE/ELX AV";"38.2455100";"-0.7667500";"Camí de Mallorca, S/N";"03006";"ELCHE/ELX";"ALICANTE/ALACANT";"ESPAÑA";"SI";"NO";""
+"03412";"CALLOSA DE SEGURA-COX";"38.1227708";"-0.8745727";"Camino Azarbe de Simón, S/N";"03360";"CALLOSA DE SEGURA";"ALICANTE/ALACANT";"ESPAÑA";"SI";"NO";""
+"04007";"GUADALAJARA-YEBES";"40.5873150";"-3.1243010";"Ctra. N - 320, Km 268";"19000";"YEBES";"GUADALAJARA";"ESPAÑA";"NO";"NO";"GUADA"
+"04040";"ZARAGOZA DELICIAS";"41.6586576";"-0.9112693";"C/ Rioja, 33";"50011";"ZARAGOZA";"ZARAGOZA";"ESPAÑA";"SI";"NO";"ZARAG"
+"04104";"CAMP DE TARRAGONA";"41.1920660";"1.27266600";"C/ Mas L'Hereuet, S/N";"43765";"TARRAGONA";"TARRAGONA";"ESPAÑA";"SI";"NO";"TARRA"
+"04307";"FIGUERES-VILAFANT";"42.2647710";"2.94354700";"Avda. Puig Grau, S/N";"17740";"VILAFANT";"GIRONA";"ESPAÑA";"NO";"NO";""
+"05000";"GRANADA";"37.1840380";"-3.6091540";"Avda. de los Andaluces, S/N";"18014";"GRANADA";"GRANADA";"ESPAÑA";"NO";"NO";""
+"05012";"LOJA";"37.1753720";"-4.1348410";"C/ Fuente Don Pedro, S/N";"18300";"LOJA";"GRANADA";"ESPAÑA";"NO";"NO";""
+"05102";"SAN XOÁN";"43.4945654";"-8.2142733";"Estrada San Xoan, S/N";"15404";"FERROL";"CORUÑA, A";"ESPAÑA";"SI";"SI";""
+"05103";"SANTA ICÍA";"43.4997707";"-8.1999226";"Ría Estación Ferrocarril, 2";"15570";"NARÓN";"CORUÑA, A";"ESPAÑA";"SI";"SI";""
+"05104";"VIRXE DO MAR";"43.4965254";"-8.2048752";"Ría de Ponte Das Cabras, S/N";"15570";"NARÓN";"CORUÑA, A";"ESPAÑA";"SI";"SI";""`;
+
+function parseRenfeCSV(csvText) {
+  const lines = csvText.trim().split('\n');
+  const headers = lines[0].split(';').map(h => h.replace(/^"|"$/g, '').trim());
+  return lines.slice(1).map(line => {
+    const values = line.split(';').map(v => v.replace(/^"|"$/g, '').trim());
+    const obj = {};
+    headers.forEach((h, i) => { obj[h] = values[i] || ''; });
+    return obj;
+  }).filter(s => s.LATITUD && s.LONGITUD && parseFloat(s.LATITUD) !== 0);
+}
+
 const URLS = {
   vehiclesCercanias: PROXY + 'https://gtfsrt.renfe.com/vehicle_positions.json',
   tripUpdatesCercanias: PROXY + 'https://gtfsrt.renfe.com/trip_updates.json',
@@ -476,6 +587,9 @@ const state = {
   realtimeDelays: {},  // tripId -> {delay, stopId, updatedTime}
   vehicles: [],        // [{id, tripId, lat, lon, label, type}]
   markers: {},         // vehicleId -> leaflet marker
+  stationMarkers: {},  // stationCode -> leaflet marker
+  renfeStations: [],   // parsed renfe stations
+  stopsByName: {},     // normalized name -> [stopId, ...]
   activeFilter: 'all',
   selectedVehicle: null,
   loading: true,
@@ -598,6 +712,7 @@ async function loadStaticData() {
   }
 
   setProgress(85, 'Conectando tiempo real…');
+  renderStationMarkers();
 }
 
 // ─── LOAD REALTIME ─────────────────────────────────────
@@ -697,7 +812,7 @@ function initMap() {
     subdomains: 'abcd',
   }).addTo(map);
 
-  map.on('click', () => closePanel());
+  map.on('click', () => { closePanel(); closeStationPanel(); });
 }
 
 // ─── MARKERS ───────────────────────────────────────────
@@ -748,7 +863,165 @@ function renderMarkers() {
   });
 }
 
-// ─── TRAIN PANEL ───────────────────────────────────────
+// ─── STATION MARKERS ───────────────────────────────────
+function renderStationMarkers() {
+  const stations = parseRenfeCSV(RENFE_STATIONS_CSV);
+  state.renfeStations = stations;
+
+  // Build reverse lookup: normalized stop name -> [stopId]
+  state.stopsByName = {};
+  Object.entries(state.stops).forEach(([stopId, stop]) => {
+    const norm = normalizeName(stop.name);
+    if (!state.stopsByName[norm]) state.stopsByName[norm] = [];
+    state.stopsByName[norm].push(stopId);
+  });
+
+  stations.forEach(st => {
+    const lat = parseFloat(st.LATITUD);
+    const lon = parseFloat(st.LONGITUD);
+    if (!lat || !lon || isNaN(lat) || isNaN(lon)) return;
+
+    const isCercanias = st.CERCANIAS === 'SI';
+    const isFeve = st.FEVE === 'SI';
+    const cls = isCercanias ? 'cercanias' : isFeve ? 'feve' : '';
+
+    const icon = L.divIcon({
+      className: `station-marker ${cls}`,
+      html: '',
+      iconSize: [10, 10],
+      iconAnchor: [5, 5],
+    });
+
+    const marker = L.marker([lat, lon], { icon, zIndexOffset: 50 }).addTo(map);
+    marker.on('click', (e) => {
+      e.originalEvent.stopPropagation();
+      openStationPanel(st);
+    });
+    state.stationMarkers[st.CODIGO] = marker;
+  });
+}
+
+function normalizeName(name) {
+  return (name || '').toUpperCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Z0-9\s]/g, '').trim();
+}
+
+function findStopIdsForStation(renfeStation) {
+  const stationNorm = normalizeName(renfeStation.DESCRIPCION);
+  const comunNorm = normalizeName(renfeStation.COMUN || '');
+  const matches = new Set();
+
+  Object.entries(state.stops).forEach(([stopId, stop]) => {
+    const stopNorm = normalizeName(stop.name);
+    if (stopNorm === stationNorm) { matches.add(stopId); return; }
+    if (comunNorm && stopNorm.includes(comunNorm) && comunNorm.length >= 3) { matches.add(stopId); return; }
+    // Partial match: station name contained in stop name or vice versa (min 5 chars)
+    const words = stationNorm.split(/\s+/).filter(w => w.length >= 4);
+    if (words.length > 0 && words.every(w => stopNorm.includes(w))) { matches.add(stopId); return; }
+  });
+
+  return [...matches];
+}
+
+function openStationPanel(renfeStation) {
+  // Close train panel if open
+  document.getElementById('train-panel').classList.remove('open');
+  state.selectedVehicle = null;
+
+  // Update header
+  document.getElementById('station-panel-name').textContent = renfeStation.DESCRIPCION;
+  const badge = document.getElementById('station-panel-badge');
+  if (renfeStation.CERCANIAS === 'SI') {
+    badge.textContent = 'Cercanías'; badge.className = 'train-badge badge-cercanias';
+  } else if (renfeStation.FEVE === 'SI') {
+    badge.textContent = 'FEVE'; badge.className = 'train-badge badge-cercanias';
+  } else {
+    badge.textContent = 'Estación'; badge.className = 'train-badge badge-ld';
+  }
+  document.getElementById('station-panel-sub').textContent = `${renfeStation.POBLACION} · ${renfeStation.PROVINCIA}`;
+
+  // Find matching stop IDs from GTFS data
+  const stopIds = findStopIdsForStation(renfeStation);
+
+  // Find upcoming trains for these stops
+  const now = new Date();
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const upcoming = [];
+
+  if (stopIds.length > 0) {
+    Object.entries(state.stopTimes).forEach(([tripId, stops]) => {
+      stops.forEach(st => {
+        if (!stopIds.includes(st.stopId)) return;
+        const arr = gtfsTimeToday(st.arrival);
+        if (!arr) return;
+        const delaySecs = state.realtimeDelays[tripId]?.delay || 0;
+        const arrUpdated = new Date(arr.getTime() + delaySecs * 1000);
+        const diffMins = (arrUpdated - now) / 60000;
+        if (diffMins < -2 || diffMins > 180) return; // -2min to 3h window
+        const trip = state.trips[tripId] || {};
+        const route = state.routes[trip.routeId] || {};
+        upcoming.push({ tripId, st, arr, arrUpdated, delaySecs, trip, route });
+      });
+    });
+  }
+
+  upcoming.sort((a, b) => a.arrUpdated - b.arrUpdated);
+
+  // Render list
+  const list = document.getElementById('station-trains-list');
+  list.innerHTML = '';
+
+  if (upcoming.length === 0) {
+    list.innerHTML = `<div class="station-empty">
+      ${stopIds.length === 0
+        ? 'Esta estación no se encontró en los datos GTFS de Renfe.<br><small style="opacity:0.6">Puede que opere solo trenes de larga distancia sin horario abierto.</small>'
+        : 'No hay trenes próximos en las próximas 3 horas.'}
+    </div>`;
+  } else {
+    upcoming.slice(0, 20).forEach(item => {
+      const { trip, route, arr, arrUpdated, delaySecs, tripId } = item;
+      const type = (trip.type || (route.type === 'cercanias' ? 'cercanias' : 'ld'));
+      const routeLabel = (route.shortName || '').slice(0, 4) || (type === 'ld' ? 'LD' : 'C');
+      const dest = trip.headsign || route.longName || tripId;
+      const origTime = formatTime(arr);
+      const updTime = Math.abs(delaySecs) >= 30 ? formatTime(arrUpdated) : null;
+      const delayStr = formatDelay(delaySecs);
+      const diffMins = Math.round((arrUpdated - now) / 60000);
+      const inStr = diffMins <= 0 ? 'Ahora' : diffMins === 1 ? 'en 1 min' : `en ${diffMins} min`;
+
+      let delayBadgeHtml = '';
+      if (delayStr) {
+        const cls = delaySecs > 0 ? 'delay-warn' : 'delay-ok';
+        delayBadgeHtml = `<span class="station-delay-badge ${cls}">${delayStr}</span>`;
+      }
+
+      list.innerHTML += `<div class="station-train-item">
+        <div class="station-route-badge ${type === 'ld' ? 'ld' : 'cercanias'}">${routeLabel}</div>
+        <div class="station-train-info">
+          <div class="station-train-dest">${dest}</div>
+          <div class="station-train-times">
+            ${updTime
+              ? `<span class="station-train-time-orig">${origTime}</span><span class="station-train-time ${delaySecs > 0 ? 'delayed' : 'early'}">${updTime}</span>`
+              : `<span class="station-train-time">${origTime}</span>`}
+            <span style="font-size:0.68rem;color:var(--text-dim)">${inStr}</span>
+          </div>
+        </div>
+        ${delayBadgeHtml}
+      </div>`;
+    });
+  }
+
+  document.getElementById('station-panel').classList.add('open');
+
+  const lat = parseFloat(renfeStation.LATITUD);
+  const lon = parseFloat(renfeStation.LONGITUD);
+  map.flyTo([lat, lon], Math.max(map.getZoom(), 12), { duration: 0.8 });
+}
+
+function closeStationPanel() {
+  document.getElementById('station-panel').classList.remove('open');
+}
 function openTrainPanel(vehicleId) {
   const v = state.vehicles.find(x => x.id === vehicleId);
   if (!v) return;
@@ -977,6 +1250,7 @@ function injectManifest() {
 
 // ─── PANEL CLOSE ───────────────────────────────────────
 document.getElementById('panel-close').addEventListener('click', closePanel);
+document.getElementById('station-panel-close').addEventListener('click', closeStationPanel);
 document.getElementById('alert-banner').addEventListener('click', () => {
   document.getElementById('alert-banner').classList.remove('visible');
 });
@@ -1006,6 +1280,13 @@ async function main() {
   panel.addEventListener('touchend', e => {
     const dy = e.changedTouches[0].clientY - startY;
     if (dy > 60) closePanel();
+  }, { passive: true });
+
+  const sPanel = document.getElementById('station-panel');
+  sPanel.addEventListener('touchstart', e => { startY = e.touches[0].clientY; }, { passive: true });
+  sPanel.addEventListener('touchend', e => {
+    const dy = e.changedTouches[0].clientY - startY;
+    if (dy > 60) closeStationPanel();
   }, { passive: true });
 
   try {
