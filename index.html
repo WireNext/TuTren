@@ -308,6 +308,9 @@
   .train-marker-wrap {
     background: transparent;
     border: none;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    pointer-events: auto !important;
 }
  .train-marker {
     width: 20px !important; 
@@ -328,6 +331,11 @@
     transform-origin: center center !important;
     padding: 0 !important;
     line-height: 1 !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -webkit-tap-highlight-color: transparent !important;
+    -webkit-touch-callout: none !important;
+    pointer-events: auto !important;
   }
   /* Gradientes para los tipos de tren */
   .train-marker.cercanias { 
@@ -830,7 +838,22 @@ function renderMarkers() {
       });
       
       const marker = L.marker([v.lat, v.lon], { icon, zIndexOffset: 100 }).addTo(map);
-      marker.on('click', (e) => { e.originalEvent.stopPropagation(); openTrainPanel(v.id); });
+      
+      // Prevenir comportamiento por defecto y conflictos
+      marker.on('click', (e) => { 
+        L.DomEvent.stop(e);
+        e.originalEvent?.stopPropagation();
+        openTrainPanel(v.id); 
+      });
+      
+      // Prevenir selección de texto
+      const el = marker.getElement();
+      if (el) {
+        el.style.userSelect = 'none';
+        el.style.webkitUserSelect = 'none';
+        el.draggable = false;
+      }
+      
       state.markers[v.id] = marker;
     }
   });
