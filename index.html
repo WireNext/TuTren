@@ -304,15 +304,15 @@
     cursor: pointer;
   }
 
-  /* LEAFLET CUSTOM MARKER */
-  .train-marker-wrap { 
-    position: relative; 
-    background: transparent; 
+/* LEAFLET CUSTOM MARKER */
+  .train-marker-wrap {
+    background: transparent;
     border: none;
-  }
-.train-marker {
-    width: 32px !important; 
-    height: 32px !important; 
+}
+  .train-marker {
+    /* Eliminamos los px fijos con !important para que herede el tamaño exacto del iconSize de JavaScript */
+    width: 100% !important; 
+    height: 100% !important; 
     border-radius: 50%;
     display: flex !important; 
     align-items: center; 
@@ -325,11 +325,12 @@
     color: white;
     box-shadow: 0 2px 12px rgba(0,0,0,0.5);
     transition: transform 0.2s;
-    margin: 0 !important; /* Crucial: Evita que Leaflet desfase el punto por el margen por defecto */
+    margin: 0 !important; /* Evita que Leaflet descuadre la posición del tren */
+    transform-origin: center center;
   }
-  .train-marker.cercanias { background: radial-gradient(circle at 35% 35%, #3b82f6, #1d4ed8); }
-  .train-marker.ld { background: radial-gradient(circle at 35% 35%, #8b5cf6, #5b21b6); }
-  .train-marker:active { transform: scale(1.2); }
+  .train-marker.cercanias { background: radial-gradient(circle at 35% 35%, #3b82f6, #1d4ed8); }
+  .train-marker.ld { background: radial-gradient(circle at 35% 35%, #8b5cf6, #5b21b6); }
+  .train-marker:active { transform: scale(1.2); }
 
   /* LOADING OVERLAY */
   #loading {
@@ -832,44 +833,71 @@ function renderMarkers() {
 
 // ─── STATION MARKERS ───────────────────────────────────
 function renderStationMarkers() {
-  state.renfeStations = RENFE_STATIONS;
+  // Si usas un FeatureGroup o Layer para las estaciones, lo limpiamos para no duplicar
+  if (window.stationLayer) {
+    window.stationLayer.clearLayers();
+  } else {
+    window.stationLayer = L.layerGroup().addTo(map);
+  }
 
-  // Build reverse lookup: normalized stop name -> [stopId]
-  state.stopsByName = {};
-  Object.entries(state.stops).forEach(([stopId, stop]) => {
-    const norm = normalizeName(stop.name);
-    if (!state.stopsByName[norm]) state.stopsByName[norm] = [];
-    state.stopsByName[norm].push(stopId);
-  });
-
-  const currentZoom = map.getZoom();
+  // Comprobamos si tenemos la lista de estaciones del mapa cargada
+  if (!RENFE_STATIONS || RENFE_STATIONS.length === 0) {
+    console.warn("No hay estaciones cargadas en RENFE_STATIONS para pintar.");
+    return;
+  }
 
   RENFE_STATIONS.forEach(st => {
-    const lat = st.la;
-    const lon = st.lo;
-    if (!lat || !lon || isNaN(lat) || isNaN(lon)) return;
+    // EXTRACCIÓN ULTRA-SEGURA DE COORDENADAS
+    let latRaw = st.la || st.LATITUD || st.lat;
+    let lonRaw = st.lo || st.LONGITUD || st.lon;
+    
+    if (!latRaw || !lonRaw) return; 
 
-    const isCercanias = st.ce === 'SI';
-    const isFeve = st.fe === 'SI';
-    const cls = isCercanias ? 'cercanias' : isFeve ? 'feve' : '';
+    // Corregimos posibles comas decimales por puntos antes de parsear
+    let lat = parseFloat(String(latRaw).replace(',', '.'));
+    let lon = parseFloat(String(lonRaw).replace(',', '.'));
 
-    // At low zoom only show cercanias/feve + major stations
-    const isMinor = !isCercanias && !isFeve;
-    const size = isMinor ? (currentZoom >= 8 ? 8 : 6) : 10;
+    if (isNaN(lat) || isNaN(lon)) return; 
 
-    const icon = L.divIcon({
-      className: `station-marker ${cls}`,
-      html: '',
-      iconSize: [size, size],
-      iconAnchor: [size/2, size/2],
+    const stName = st.n || st.DESCRIPCION || 'Estación';
+
+    // ─── NUEVO DISEÑO AZUL MATE (MENOS BRILLANTE) ───
+    // Usamos un azul corporativo suavizado y un resplandor muy sutil opaco
+    const markerColor = '#3b70a3'; 
+    const shadowColor = 'rgba(59, 112, 163, 0.4)';
+
+    const stationIcon = L.divIcon({
+      className: 'custom-station-icon',
+      html: `<div style="
+        width: 11px;
+        height: 11px;
+        background: ${markerColor};
+        border: 2px solid #ffffff;
+        border-radius: 50%;
+        box-shadow: 0 0 4px ${shadowColor};
+        transition: transform 0.2s;
+      "></div>`,
+      iconSize: [11, 11],
+      iconAnchor: [5.5, 5.5]
     });
 
-    const marker = L.marker([lat, lon], { icon, zIndexOffset: 50 }).addTo(map);
-    marker.on('click', (e) => {
-      e.originalEvent.stopPropagation();
+    const marker = L.marker([lat, lon], { icon: stationIcon });
+
+    // Asociamos el evento Click para que abra tu panel con el ID numérico exacto
+    marker.on('click', () => {
       openStationPanel(st);
     });
-    state.stationMarkers[st.c] = marker;
+
+    // Añadimos tu tooltip al pasar el ratón por encima
+    marker.bindTooltip(stName, {
+      permanent: false,
+      direction: 'top',
+      className: 'station-tooltip',
+      offset: [0, -5]
+    });
+
+    // Añadimos el marcador a la capa del mapa
+    window.stationLayer.addLayer(marker);
   });
 }
 
@@ -880,59 +908,21 @@ function normalizeName(name) {
 }
 
 function findStopIdsForStation(renfeStation) {
-  const nameRaw = renfeStation.n || renfeStation.DESCRIPCION || '';
-  const comunRaw = renfeStation.co || renfeStation.COMUN || '';
-  
-  const stationNorm = normalizeName(nameRaw);
-  const comunNorm = normalizeName(comunRaw);
+  // Obtenemos el código de la estación de tu estaciones.csv (mapeando tu propiedad 'CODIGO')
+  const codigoMapa = renfeStation.CODIGO || renfeStation.c || '';
+  if (!codigoMapa) return [];
+
+  // Convertimos a string, quitamos espacios y eliminamos ceros a la izquierda (ej: "04100" -> "4100")
+  const codigoMapaNorm = String(codigoMapa).trim().replace(/^0+/, '');
   const matches = new Set();
 
-  // Palabras ruidosas que no aportan valor al emparejar y suelen causar fallos
-  const stopWords = ['estacion', 'cercanias', 'platja', 'playa', 'av', 'ld', 'rodalies', 'feve'];
-
-  // Sacamos las palabras clave significativas del nombre de la estación (longitud >= 3 y que no sean ruido)
-  const wordsStation = stationNorm.split(/[\s\-]+/)
-    .filter(w => w.length >= 3 && !stopWords.includes(w));
-
-  Object.entries(state.stops).forEach(([stopId, stop]) => {
-    const stopNorm = normalizeName(stop.name);
+  // Buscamos directamente las claves en state.stops que equivalgan al mismo ID numérico
+  Object.keys(state.stops).forEach(stopId => {
+    const stopIdNorm = String(stopId).trim().replace(/^0+/, '');
     
-    // 1. Coincidencia Exacta (Máxima prioridad)
-    if (stopNorm === stationNorm) { matches.add(stopId); return; }
-    
-    // 2. Coincidencia por Nombre Común (Muy fiable)
-    if (comunNorm && comunNorm.length >= 3 && (stopNorm.includes(comunNorm) || comunNorm.includes(stopNorm))) { 
-      matches.add(stopId); 
-      return; 
-    }
-    
-    // 3. Coincidencia elástica por intersección de palabras clave
-    const wordsStop = stopNorm.split(/[\s\-]+/)
-      .filter(w => w.length >= 3 && !stopWords.includes(w));
-    
-    // Contamos cuántas palabras de la estación del mapa existen en la parada del GTFS
-    let matchCount = 0;
-    wordsStation.forEach(w => {
-      if (stopNorm.includes(w)) matchCount++;
-    });
-
-    // Contamos también a la inversa
-    let reverseMatchCount = 0;
-    wordsStop.forEach(w => {
-      if (stationNorm.includes(w)) reverseMatchCount++;
-    });
-
-    // REGLA DE ORO DE EMPAREJAMIENTO:
-    // Si la estación tiene 1 o 2 palabras clave y coincide al menos una (ej: "Castelló" con "Castelló de la Plana")
-    // O si es un nombre largo y coinciden al menos 2 palabras significativas.
-    if (wordsStation.length > 0 && (
-      (wordsStation.length <= 2 && matchCount >= 1) || 
-      (matchCount >= 2) ||
-      (wordsStop.length <= 2 && reverseMatchCount >= 1) ||
-      (reverseMatchCount >= 2)
-    )) {
+    // Si los códigos numéricos coinciden exactos, es la parada correcta
+    if (stopIdNorm === codigoMapaNorm) {
       matches.add(stopId);
-      return;
     }
   });
 
@@ -961,7 +951,7 @@ function openStationPanel(renfeStation) {
   }
   document.getElementById('station-panel-sub').textContent = `${stPo} · ${stPr}`;
 
-  // Find matching stop IDs from GTFS data
+  // Find matching stop IDs from GTFS data (Ahora usa la lógica exacta por código)
   let stopIds = findStopIdsForStation(renfeStation) || [];
   stopIds = stopIds.map(id => String(id).trim());
 
@@ -974,6 +964,7 @@ function openStationPanel(renfeStation) {
       const tripId = String(rawTripId).trim();
 
       stops.forEach(st => {
+        // Comparación directa de strings de paradas limpios
         if (!stopIds.includes(String(st.stopId).trim())) return;
         
         const arr = gtfsTimeToday(st.arrival);
