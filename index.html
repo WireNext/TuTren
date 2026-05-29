@@ -309,8 +309,7 @@
     background: transparent;
     border: none;
 }
-  .train-marker {
-    /* Eliminamos los px fijos con !important para que herede el tamaño exacto del iconSize de JavaScript */
+ .train-marker {
     width: 100% !important; 
     height: 100% !important; 
     border-radius: 50%;
@@ -325,11 +324,12 @@
     color: white;
     box-shadow: 0 2px 12px rgba(0,0,0,0.5);
     transition: transform 0.2s;
-    margin: 0 !important; /* Evita que Leaflet descuadre la posición del tren */
+    margin: 0 !important; /* Evita el desfase de Leaflet */
     transform-origin: center center;
   }
-  .train-marker.cercanias { background: radial-gradient(circle at 35% 35%, #3b82f6, #1d4ed8); }
-  .train-marker.ld { background: radial-gradient(circle at 35% 35%, #8b5cf6, #5b21b6); }
+  /* Acoplamos los degradados directamente a la misma capa */
+  .train-marker.cercanias { background: radial-gradient(circle at 35% 35%, #3b82f6, #1d4ed8) !important; }
+  .train-marker.ld { background: radial-gradient(circle at 35% 35%, #8b5cf6, #5b21b6) !important; }
   .train-marker:active { transform: scale(1.2); }
 
   /* LOADING OVERLAY */
