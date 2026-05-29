@@ -308,9 +308,6 @@
   .train-marker-wrap {
     background: transparent;
     border: none;
-    user-select: none !important;
-    -webkit-user-select: none !important;
-    pointer-events: auto !important;
 }
  .train-marker {
     width: 20px !important; 
@@ -331,11 +328,6 @@
     transform-origin: center center !important;
     padding: 0 !important;
     line-height: 1 !important;
-    user-select: none !important;
-    -webkit-user-select: none !important;
-    -webkit-tap-highlight-color: transparent !important;
-    -webkit-touch-callout: none !important;
-    pointer-events: auto !important;
   }
   /* Gradientes para los tipos de tren */
   .train-marker.cercanias { 
@@ -378,6 +370,20 @@
 
   .leaflet-control-attribution { display: none; }
   .leaflet-control-zoom a { background: rgba(10,15,40,0.8) !important; border-color: var(--glass-border) !important; color: var(--text) !important; backdrop-filter: blur(10px); }
+
+  /* Prevenir que Leaflet mueva marcadores */
+  .leaflet-marker {
+    user-select: none !important;
+    -webkit-user-select: none !important;
+  }
+  
+  .leaflet-pane.leaflet-marker-pane {
+    pointer-events: none !important;
+  }
+  
+  .leaflet-pane.leaflet-marker-pane .leaflet-marker {
+    pointer-events: auto !important;
+  }
 
   /* STATION MARKERS */
   .station-marker {
@@ -837,22 +843,28 @@ function renderMarkers() {
         iconAnchor: [10, 10],
       });
       
-      const marker = L.marker([v.lat, v.lon], { icon, zIndexOffset: 100 }).addTo(map);
+      const marker = L.marker([v.lat, v.lon], { 
+        icon, 
+        zIndexOffset: 100,
+        draggable: false,
+        keyboard: false
+      }).addTo(map);
       
-      // Prevenir comportamiento por defecto y conflictos
       marker.on('click', (e) => { 
-        L.DomEvent.stop(e);
-        e.originalEvent?.stopPropagation();
+        e.originalEvent?.stopPropagation?.();
+        e.originalEvent?.preventDefault?.();
         openTrainPanel(v.id); 
       });
       
-      // Prevenir selección de texto
-      const el = marker.getElement();
-      if (el) {
-        el.style.userSelect = 'none';
-        el.style.webkitUserSelect = 'none';
-        el.draggable = false;
-      }
+      marker.on('mousedown', (e) => {
+        e.originalEvent?.stopPropagation?.();
+        e.originalEvent?.preventDefault?.();
+      });
+      
+      marker.on('touchstart', (e) => {
+        e.originalEvent?.stopPropagation?.();
+        e.originalEvent?.preventDefault?.();
+      });
       
       state.markers[v.id] = marker;
     }
