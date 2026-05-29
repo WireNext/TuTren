@@ -880,21 +880,60 @@ function normalizeName(name) {
 }
 
 function findStopIdsForStation(renfeStation) {
-  const stationNorm = normalizeName(renfeStation.n || renfeStation.DESCRIPCION || '');
-  const comunNorm = normalizeName(renfeStation.co || renfeStation.COMUN || '');
+  const nameRaw = renfeStation.n || renfeStation.DESCRIPCION || '';
+  const comunRaw = renfeStation.co || renfeStation.COMUN || '';
+  
+  const stationNorm = normalizeName(nameRaw);
+  const comunNorm = normalizeName(comunRaw);
   const matches = new Set();
+
+  // Palabras ruidosas que no aportan valor al emparejar y suelen causar fallos
+  const stopWords = ['estacion', 'cercanias', 'platja', 'playa', 'av', 'ld', 'rodalies', 'feve'];
+
+  // Sacamos las palabras clave significativas del nombre de la estación (longitud >= 3 y que no sean ruido)
+  const wordsStation = stationNorm.split(/[\s\-]+/)
+    .filter(w => w.length >= 3 && !stopWords.includes(w));
 
   Object.entries(state.stops).forEach(([stopId, stop]) => {
     const stopNorm = normalizeName(stop.name);
+    
+    // 1. Coincidencia Exacta (Máxima prioridad)
     if (stopNorm === stationNorm) { matches.add(stopId); return; }
-    if (comunNorm && comunNorm.length >= 3 && stopNorm.includes(comunNorm)) { matches.add(stopId); return; }
-    if (comunNorm && comunNorm.length >= 3 && comunNorm.includes(stopNorm) && stopNorm.length >= 3) { matches.add(stopId); return; }
-    // Partial match: all words of station name (>=4 chars) present in stop name
-    const words = stationNorm.split(/\s+/).filter(w => w.length >= 4);
-    if (words.length > 0 && words.every(w => stopNorm.includes(w))) { matches.add(stopId); return; }
-    // Reverse: all words of stop name present in station name
-    const stopWords = stopNorm.split(/\s+/).filter(w => w.length >= 4);
-    if (stopWords.length > 0 && stopWords.every(w => stationNorm.includes(w))) { matches.add(stopId); return; }
+    
+    // 2. Coincidencia por Nombre Común (Muy fiable)
+    if (comunNorm && comunNorm.length >= 3 && (stopNorm.includes(comunNorm) || comunNorm.includes(stopNorm))) { 
+      matches.add(stopId); 
+      return; 
+    }
+    
+    // 3. Coincidencia elástica por intersección de palabras clave
+    const wordsStop = stopNorm.split(/[\s\-]+/)
+      .filter(w => w.length >= 3 && !stopWords.includes(w));
+    
+    // Contamos cuántas palabras de la estación del mapa existen en la parada del GTFS
+    let matchCount = 0;
+    wordsStation.forEach(w => {
+      if (stopNorm.includes(w)) matchCount++;
+    });
+
+    // Contamos también a la inversa
+    let reverseMatchCount = 0;
+    wordsStop.forEach(w => {
+      if (stationNorm.includes(w)) reverseMatchCount++;
+    });
+
+    // REGLA DE ORO DE EMPAREJAMIENTO:
+    // Si la estación tiene 1 o 2 palabras clave y coincide al menos una (ej: "Castelló" con "Castelló de la Plana")
+    // O si es un nombre largo y coinciden al menos 2 palabras significativas.
+    if (wordsStation.length > 0 && (
+      (wordsStation.length <= 2 && matchCount >= 1) || 
+      (matchCount >= 2) ||
+      (wordsStop.length <= 2 && reverseMatchCount >= 1) ||
+      (reverseMatchCount >= 2)
+    )) {
+      matches.add(stopId);
+      return;
+    }
   });
 
   return [...matches];
@@ -912,7 +951,6 @@ function openStationPanel(renfeStation) {
   const stPo = renfeStation.po || renfeStation.POBLACION || '';
   const stPr = renfeStation.pr || renfeStation.PROVINCIA || '';
   document.getElementById('station-panel-name').textContent = stName;
-  
   const badge = document.getElementById('station-panel-badge');
   if (stCe === 'SI') {
     badge.textContent = 'Cercanías'; badge.className = 'train-badge badge-cercanias';
@@ -925,8 +963,6 @@ function openStationPanel(renfeStation) {
 
   // Find matching stop IDs from GTFS data
   let stopIds = findStopIdsForStation(renfeStation) || [];
-  
-  // MEJORA ANTI-VACÍOS: Aseguramos comparar los IDs como Strings limpios por si acaso
   stopIds = stopIds.map(id => String(id).trim());
 
   // Find upcoming trains for these stops
@@ -934,81 +970,118 @@ function openStationPanel(renfeStation) {
   const upcoming = [];
 
   if (stopIds.length > 0) {
-    Object.entries(state.stopTimes).forEach(([tripId, stops]) => {
+    Object.entries(state.stopTimes).forEach(([rawTripId, stops]) => {
+      const tripId = String(rawTripId).trim();
+
       stops.forEach(st => {
-        // SOLUCIÓN AL FORMATO: Pasamos a String para evitar que falle si uno es número y otro texto
         if (!stopIds.includes(String(st.stopId).trim())) return;
         
         const arr = gtfsTimeToday(st.arrival);
         if (!arr) return;
         
-        const delaySecs = state.realtimeDelays[tripId]?.delay || 0;
+        const delayInfo = state.realtimeDelays[tripId] || state.realtimeDelays[rawTripId] || { delay: 0 };
+        const delaySecs = delayInfo.delay || 0;
+        
         const arrUpdated = new Date(arr.getTime() + delaySecs * 1000);
         const diffMins = (arrUpdated - now) / 60000;
         
-        if (diffMins < -5 || diffMins > 180) return; // Ventana de -5min (por si va retrasado) a 3h
+        // Ventana de tiempo: desde -2 min (recién salidos) hasta 3 horas en adelante
+        if (diffMins < -2 || diffMins > 180) return; 
+
+        let trip = state.trips[tripId] || state.trips[rawTripId];
+        if (!trip) {
+          const cleanId = tripId.split('-')[0].split('_')[0].trim();
+          trip = state.trips[cleanId];
+        }
+
+        const finalTrip = trip || {};
+        const route = state.routes[finalTrip.routeId] || {};
         
-        const trip = state.trips[tripId] || {};
-        const route = state.routes[trip.routeId] || {};
-        
-        upcoming.push({ tripId, st, arr, arrUpdated, delaySecs, trip, route });
+        upcoming.push({ tripId, st, arr, arrUpdated, delaySecs, trip: finalTrip, route });
       });
     });
   }
 
-  // Ordenar por hora real de llegada calculando el retraso
+  // Ordenar de forma ascendente por hora real estimada
   upcoming.sort((a, b) => a.arrUpdated - b.arrUpdated);
 
-  // ─── SOLUCIÓN AL BUCLE REPETIDO: RENDERIZAR EL HTML DINÁMICAMENTE ───
-  // Reemplaza toda la lógica inferior que tuvieses por esta:
-  
-  const container = document.getElementById('station-trains-list'); // <--- Asegúrate de que el ID de tu contenedor sea este o cámbialo por el tuyo (ej: 'station-panel-content')
-  if (!container) return;
+  // ─── SOLUCIÓN VISUAL: FILTRAR POR LO QUE EL USUARIO VE (DESTINO + HORA) ───
+  const seenRows = new Set();
+  const uniqueUpcoming = upcoming.filter(item => {
+    const type = (item.trip.type || (item.route.type === 'cercanias' ? 'cercanias' : 'ld'));
+    const routeLabel = (item.route.shortName || '').slice(0, 4) || (type === 'ld' ? 'LD' : 'C');
+    const destRaw = item.trip.headsign || item.route.longName || item.tripId;
+    const dest = fixUtf8String(destRaw);
+    const origTime = formatTime(item.arr);
 
-  if (upcoming.length === 0) {
-    container.innerHTML = `<div class="no-trains" style="padding:20px; text-align:center; opacity:0.6;">
-      No hay próximas salidas programadas en las próximas 3 horas.
+    // Creamos una clave única usando la línea, el destino y la hora teórica de paso
+    const rowKey = `${routeLabel}-${dest}-${origTime}`;
+    
+    if (seenRows.has(rowKey)) return false; // Si ya existe esa combinación exacta, la descartamos
+    seenRows.add(rowKey);
+    return true;
+  });
+
+  // Render list
+  const list = document.getElementById('station-trains-list');
+  if (!list) return;
+  list.innerHTML = '';
+
+  if (uniqueUpcoming.length === 0) {
+    list.innerHTML = `<div class="station-empty">
+      ${stopIds.length === 0
+        ? 'Esta estación no se encontró en los datos GTFS de Renfe.<br><small style="opacity:0.6">Puede que opere solo trenes de larga distancia sin horario abierto.</small>'
+        : 'No hay trenes próximos en las próximas 3 horas.'}
     </div>`;
   } else {
-    let html = '';
-    
-    // Iteramos de forma segura usando la variable local 'item'
-    upcoming.forEach(item => {
-      const timeStr = item.arr.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    let htmlBuffer = '';
+
+    // Mostramos los primeros 20 trenes únicos reales
+    uniqueUpcoming.slice(0, 20).forEach(item => {
+      const { trip, route, arr, arrUpdated, delaySecs, tripId } = item;
+      const type = (trip.type || (route.type === 'cercanias' ? 'cercanias' : 'ld'));
+      const routeLabel = (route.shortName || '').slice(0, 4) || (type === 'ld' ? 'LD' : 'C');
       
-      // Calcular retraso visible
-      let delayHtml = '';
-      if (item.delaySecs > 0) {
-        const mins = Math.round(item.delaySecs / 60);
-        delayHtml = `<span class="delay-tag" style="color:#ff4a4a; margin-left:6px; font-size:0.85em;">(+${mins} min)</span>`;
+      const destRaw = trip.headsign || route.longName || (tripId !== 'undefined' ? `Tren ${tripId}` : 'Servicio Regulado');
+      const dest = fixUtf8String(destRaw);
+      
+      const origTime = formatTime(arr);
+      const updTime = Math.abs(delaySecs) >= 30 ? formatTime(arrUpdated) : null;
+      const delayStr = formatDelay(delaySecs);
+      const diffMins = Math.round((arrUpdated - now) / 60000);
+      const inStr = diffMins <= 0 ? 'Ahora' : diffMins === 1 ? 'en 1 min' : `en ${diffMins} min`;
+
+      let delayBadgeHtml = '';
+      if (delayStr) {
+        const cls = delaySecs > 0 ? 'delay-warn' : 'delay-ok';
+        delayBadgeHtml = `<span class="station-delay-badge ${cls}">${delayStr}</span>`;
       }
 
-      const routeName = item.route.shortName || item.route.longName || 'Tren';
-      const destination = item.trip.headsign || 'Destino desconocido';
-      const routeColor = item.route.color ? `#${item.route.color}` : '#555';
-
-      // Añadimos la fila asegurando que los datos pertenezcan al 'item' actual
-      html += `
-        <div class="station-train-row" style="display:flex; align-items:center; justify-content:space-between; padding:12px; border-bottom:1px solid rgba(255,255,255,0.08);">
-          <div style="display:flex; align-items:center; gap:12px;">
-            <span class="route-badge" style="background:${routeColor}; color:#fff; padding:3px 8px; border-radius:4px; font-weight:bold; font-size:0.85em;">
-              ${routeName}
-            </span>
-            <span style="font-weight:500; color:#fff;">${destination}</span>
-          </div>
-          <div style="text-align:right;">
-            <span style="font-family:'Space Grotesk', monospace; font-weight:600; color:#00ffaa;">${timeStr}</span>
-            ${delayHtml}
+      htmlBuffer += `<div class="station-train-item">
+        <div class="station-route-badge ${type === 'ld' ? 'ld' : 'cercanias'}">${routeLabel}</div>
+        <div class="station-train-info">
+          <div class="station-train-dest">${dest}</div>
+          <div class="station-train-times">
+            ${updTime
+              ? `<span class="station-train-time-orig">${origTime}</span><span class="station-train-time ${delaySecs > 0 ? 'delayed' : 'early'}">${updTime}</span>`
+              : `<span class="station-train-time">${origTime}</span>`}
+            <span style="font-size:0.68rem;color:var(--text-dim)">${inStr}</span>
           </div>
         </div>
-      `;
+        ${delayBadgeHtml}
+      </div>`;
     });
 
-    container.innerHTML = html;
+    list.innerHTML = htmlBuffer;
   }
 
-  // Abrir panel visualmente añadiendo la clase css
   document.getElementById('station-panel').classList.add('open');
+
+  const lat = renfeStation.la || parseFloat(renfeStation.LATITUD);
+  const lon = renfeStation.lo || parseFloat(renfeStation.LONGITUD);
+  if (!isNaN(lat) && !isNaN(lon)) {
+    map.flyTo([lat, lon], Math.max(map.getZoom(), 12), { duration: 0.8 });
+  }
 }
 
 function closeStationPanel() {
