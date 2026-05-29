@@ -781,7 +781,12 @@ function initMap() {
     attributionControl: false,
     zoomAnimation: false,
     fadeAnimation: false,
+    markerZoomAnimation: false,
   });
+  
+  // Desactivar cualquier paneo automático
+  map.setMaxBounds(null);
+  map.off('popupopen');
 
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
     maxZoom: 19,
@@ -1128,8 +1133,8 @@ function openTrainPanel(vehicleId) {
 
   document.getElementById('train-panel').classList.add('open');
 
-  // Fly to train
-  map.flyTo([v.lat, v.lon], Math.max(map.getZoom(), 12), { duration: 0.8 });
+  // Desactivado: no mover el mapa cuando se abre el panel
+  // map.flyTo([v.lat, v.lon], Math.max(map.getZoom(), 12), { duration: 0.8 });
 }
 
 function buildStopsTimeline(v, delaySecs) {
