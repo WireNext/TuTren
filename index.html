@@ -1358,18 +1358,32 @@ async function main() {
   // Panel drag to close
   let startY = 0;
   const panel = document.getElementById('train-panel');
-  panel.addEventListener('touchstart', e => { startY = e.touches[0].clientY; }, { passive: true });
+  panel.addEventListener('touchstart', e => { 
+    e.stopPropagation();
+    startY = e.touches[0].clientY; 
+  }, { passive: true });
   panel.addEventListener('touchend', e => {
+    e.stopPropagation();
     const dy = e.changedTouches[0].clientY - startY;
     if (dy > 60) closePanel();
   }, { passive: true });
+  panel.addEventListener('click', e => {
+    e.stopPropagation();
+  });
 
   const sPanel = document.getElementById('station-panel');
-  sPanel.addEventListener('touchstart', e => { startY = e.touches[0].clientY; }, { passive: true });
+  sPanel.addEventListener('touchstart', e => { 
+    e.stopPropagation();
+    startY = e.touches[0].clientY; 
+  }, { passive: true });
   sPanel.addEventListener('touchend', e => {
+    e.stopPropagation();
     const dy = e.changedTouches[0].clientY - startY;
     if (dy > 60) closeStationPanel();
   }, { passive: true });
+  sPanel.addEventListener('click', e => {
+    e.stopPropagation();
+  });
 
   try {
     await loadStaticData();
