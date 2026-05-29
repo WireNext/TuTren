@@ -309,28 +309,44 @@
     background: transparent;
     border: none;
 }
- .train-marker {
+/* LEAFLET CUSTOM MARKER */
+  .train-marker {
+    /* Forzamos a Leaflet a que el contenedor sea un círculo perfecto */
     width: 100% !important; 
     height: 100% !important; 
-    border-radius: 50%;
+    border-radius: 50% !important;
+    
+    /* Centramos el texto (C6, AVE...) en el corazón del círculo */
     display: flex !important; 
-    align-items: center; 
-    justify-content: center;
-    border: 2px solid rgba(255,255,255,0.4);
+    align-items: center !important; 
+    justify-content: center !important;
+    
+    /* Diseño visual: borde fino y sombra sutil */
+    border: 2px solid rgba(255, 255, 255, 0.6) !important;
     font-size: 0.65rem; 
     font-weight: 700;
     font-family: 'Space Grotesk', sans-serif;
     cursor: pointer; 
-    color: white;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.5);
-    transition: transform 0.2s;
-    margin: 0 !important; /* Evita el desfase de Leaflet */
+    color: white !important;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5) !important;
+    
+    /* Evitamos que Leaflet descuadre la posición e igualamos el centrado */
+    margin: 0 !important; 
     transform-origin: center center;
+    transition: transform 0.2s;
   }
-  /* Acoplamos los degradados directamente a la misma capa */
-  .train-marker.cercanias { background: radial-gradient(circle at 35% 35%, #3b82f6, #1d4ed8) !important; }
-  .train-marker.ld { background: radial-gradient(circle at 35% 35%, #8b5cf6, #5b21b6) !important; }
-  .train-marker:active { transform: scale(1.2); }
+
+  /* Forzamos los degradados de fondo para que se superpongan a los estilos de Leaflet */
+  .train-marker.cercanias { 
+    background: radial-gradient(circle at 35% 35%, #3b82f6, #1d4ed8) !important; 
+  }
+  .train-marker.ld { 
+    background: radial-gradient(circle at 35% 35%, #8b5cf6, #5b21b6) !important; 
+  }
+  
+  .train-marker:active { 
+    transform: scale(1.15); 
+  }
 
   /* LOADING OVERLAY */
   #loading {
