@@ -810,10 +810,10 @@ function renderMarkers() {
     } else {
       // SOLUCIÓN: El L.divIcon ahora es directamente el propio círculo del tren
       const icon = L.divIcon({
-        className: `train-marker ${v.type}`, // Las clases CSS se aplican directamente aquí
-        html: label,                         // El texto va directo dentro
-        iconSize: [32, 32],                  // Dimensiones físicas del marcador
-        iconAnchor: [16, 16],                // Clava el centro exacto (mitad de 32)
+        className: `train-marker ${v.type}`, 
+        html: label, 
+        iconSize: [26, 26],    // Bajamos a 26px
+        iconAnchor: [13, 13],  // Mitad de 26
       });
       
       const marker = L.marker([v.lat, v.lon], { icon, zIndexOffset: 100 }).addTo(map);
