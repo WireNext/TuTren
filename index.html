@@ -310,27 +310,33 @@
     border: none;
 }
  .train-marker {
-    width: 100% !important; 
-    height: 100% !important; 
+    width: 36px !important; 
+    height: 36px !important; 
     border-radius: 50%;
     display: flex !important; 
-    align-items: center; 
-    justify-content: center;
-    border: 2px solid rgba(255,255,255,0.4);
-    font-size: 0.65rem; 
-    font-weight: 700;
-    font-family: 'Space Grotesk', sans-serif;
-    cursor: pointer; 
-    color: white;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.5);
-    transition: transform 0.2s;
-    margin: 0 !important; /* Evita el desfase de Leaflet */
-    transform-origin: center center;
+    align-items: center !important;
+    justify-content: center !important;
+    border: 2px solid rgba(255,255,255,0.5) !important;
+    font-size: 0.7rem !important;
+    font-weight: 700 !important;
+    font-family: 'Space Grotesk', sans-serif !important;
+    cursor: pointer !important;
+    color: white !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.6) !important;
+    transition: transform 0.2s !important;
+    margin: 0 !important;
+    transform-origin: center center !important;
+    padding: 0 !important;
+    line-height: 1 !important;
   }
-  /* Acoplamos los degradados directamente a la misma capa */
-  .train-marker.cercanias { background: radial-gradient(circle at 35% 35%, #3b82f6, #1d4ed8) !important; }
-  .train-marker.ld { background: radial-gradient(circle at 35% 35%, #8b5cf6, #5b21b6) !important; }
-  .train-marker:active { transform: scale(1.2); }
+  /* Gradientes para los tipos de tren */
+  .train-marker.cercanias { 
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
+  }
+  .train-marker.ld { 
+    background: linear-gradient(135deg, #8b5cf6 0%, #5b21b6 100%) !important;
+  }
+  .train-marker:active { transform: scale(1.2) !important; }
 
   /* LOADING OVERLAY */
   #loading {
@@ -361,19 +367,6 @@
   }
   .leaflet-popup-tip { background: rgba(10,15,40,0.9) !important; }
   .leaflet-popup-close-button { color: var(--text-muted) !important; }
-  
-  /* Popup específico para trenes */
-  .train-popup .leaflet-popup-content {
-    margin: 0 !important;
-    padding: 8px 0 !important;
-    color: var(--text) !important;
-  }
-  .train-popup .leaflet-popup-content strong {
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: #fff;
-  }
 
   .leaflet-control-attribution { display: none; }
   .leaflet-control-zoom a { background: rgba(10,15,40,0.8) !important; border-color: var(--glass-border) !important; color: var(--text) !important; backdrop-filter: blur(10px); }
@@ -825,23 +818,11 @@ function renderMarkers() {
       const icon = L.divIcon({
         className: `train-marker ${v.type}`, 
         html: label, 
-        iconSize: [26, 26],    // Bajamos a 26px
-        iconAnchor: [13, 13],  // Mitad de 26
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
       });
       
       const marker = L.marker([v.lat, v.lon], { icon, zIndexOffset: 100 }).addTo(map);
-      
-      // AGREGAR POPUP CON INFORMACIÓN DEL TREN
-      const popupContent = `<div style="font-family: 'DM Sans', sans-serif; text-align: center; padding: 4px;">
-        <strong>${label}</strong><br>
-        <span style="font-size: 0.75rem; opacity: 0.8;">${v.type === 'cercanias' ? 'Cercanías' : 'Larga Distancia'}</span>
-      </div>`;
-      marker.bindPopup(popupContent, { 
-        closeButton: true,
-        maxWidth: 150,
-        className: 'train-popup'
-      });
-      
       marker.on('click', (e) => { e.originalEvent.stopPropagation(); openTrainPanel(v.id); });
       state.markers[v.id] = marker;
     }
