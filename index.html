@@ -802,9 +802,16 @@ function initMap() {
   map.setMaxBounds(null);
   map.off('popupopen');
 
+  // 1. Capa base oscura (La que ya tienes)
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
     maxZoom: 19,
     subdomains: 'abcd',
+  }).addTo(map);
+
+  // 2. NUEVA: Capa de OpenRailwayMap (Se dibuja encima automáticamente con transparencia)
+  L.tileLayer('https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    // Usamos los subdominios estándar si hiciese falta, pero dejándolo así Leaflet lo gestiona nativo
   }).addTo(map);
 
   map.on('click', () => { closePanel(); closeStationPanel(); });
